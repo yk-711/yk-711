@@ -21,9 +21,6 @@ app.use(cookieParser());
 const configuredFrontend = String(process.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
 const allowedOrigins = new Set([
   "https://nesma-store.pages.dev",
-  "https://nesma-store.com",
-  "https://www.nesma-store.com",
-  "https://yk-711.github.io",
   configuredFrontend,
   `http://localhost:${port}`,
   "http://127.0.0.1:" + port
@@ -39,13 +36,25 @@ app.use(cors({
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-8", legacyHeaders: false, message: { message: "محاولات كثيرة. حاول مرة أخرى بعد قليل." } });
 
 function isAdmin(req) {
-  const configured = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-  const adminEmail = "younesalkiser712@gmail.com";
-  return Boolean(req.user?.email && String(req.user.email).trim().toLowerCase() === adminEmail);
+  const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  return Boolean(adminEmail && req.user?.email && String(req.user.email).toLowerCase() === adminEmail);
 }
 function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً." });
   if (!isAdmin(req)) return res.status(403).json({ message: "هذه الصفحة مخصصة لمدير المتجر." });
+  let csrf = req.cookies?.admin_csrf;
+  if (!csrf) {
+    csrf = randomUUID();
+    res.cookie('admin_csrf', csrf, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.COOKIE_SAMESITE || 'none', path: '/' });
+  }
+  if (['POST','PUT','PATCH','DELETE'].includes(req.method) && req.path !== '/me') {
+    if (!req.headers['x-csrf-token'] || req.headers['x-csrf-token'] !== csrf) return res.status(403).json({ message: 'رمز الحماية غير صالح. حدّث لوحة الإدارة وحاول مجددًا.' });
+  }
+  res.on('finish', () => {
+    if (['POST','PUT','PATCH','DELETE'].includes(req.method)) {
+      query(`INSERT INTO audit_logs(admin_user_id,admin_email,action,resource_type,resource_id,description,ip,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [req.user?.id || null, req.user?.email || '', `${req.method} ${req.path}`, 'api', req.params?.id || null, 'عملية إدارية', req.ip || '', String(req.headers['user-agent'] || '').slice(0,500)]).catch(()=>{});
+    }
+  });
   next();
 }
 function arr(v) {
@@ -57,7 +66,14 @@ function cleanProduct(body) {
   const badges = arr(body.badges || body.badge);
   return {
     title: String(body.title || "").trim().slice(0, 200),
+    title_en: String(body.title_en || body.titleEn || "").trim().slice(0, 200),
     description: String(body.description || "").trim(),
+    short_description: String(body.short_description || body.shortDescription || "").trim(),
+    sku: String(body.sku || "").trim().slice(0, 100),
+    barcode: String(body.barcode || "").trim().slice(0, 100),
+    seo_title: String(body.seo_title || "").trim().slice(0, 255),
+    seo_description: String(body.seo_description || "").trim(),
+    slug: String(body.slug || "").trim().slice(0, 180),
     category: String(body.category || categorySlugs[0] || "عام").trim().slice(0, 100),
     category_slugs: categorySlugs.length ? categorySlugs : [String(body.category || "عام").trim()],
     audience: ["women", "kids"].includes(body.audience) ? body.audience : "women",
@@ -66,6 +82,7 @@ function cleanProduct(body) {
     price: Number(body.price || 0), rating: Number(body.rating || 5), reviews: Number(body.reviews || 0),
     tags: String(body.tags || "").trim(), prep_time: Number(body.prep_time || 10),
     badges,
+    stock_total: Math.max(0, Number(body.stock_total ?? body.stock ?? 0) || 0),
     sizes: arr(body.sizes || body.available_sizes),
     colors: arr(body.colors || body.available_colors),
     fabrics: arr(body.fabrics || body.fabric || body.available_fabrics),
@@ -162,139 +179,25 @@ async function awardOrderPoints(orderId) {
   return { buyer, referral };
 }
 
-app.get("/api/health", async (_req, res) => { try { const c=await query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='orders'`); res.json({ ok: true, database: "connected", github: githubConfig().enabled, orders: { referral_code: c.rows.some(r=>r.column_name==='referral_code'), referral_user_id: c.rows.some(r=>r.column_name==='referral_user_id') } }); } catch (e) { res.status(503).json({ ok: false, database: "unavailable", error: e.message }); } });
+app.get("/api/health", async (_req, res) => { try { await query("SELECT 1"); res.json({ ok: true, database: "connected", github: githubConfig().enabled }); } catch { res.status(503).json({ ok: false, database: "unavailable", github: githubConfig().enabled }); } });
 app.get("/api/auth/google", googleStart); app.get("/api/auth/google/callback", googleCallback);
 app.post("/api/auth/register", authLimiter, register); app.post("/api/auth/login", authLimiter, login); app.post("/api/auth/logout", logout); app.get("/api/auth/me", authenticate, me); app.post("/api/auth/forgot-password", authLimiter, forgotPassword); app.post("/api/auth/reset-password", authLimiter, resetPassword);
-app.get("/api/admin/me", authenticate, (req, res) => isAdmin(req) ? res.json({ ok: true, user: req.user }) : res.status(403).json({ message: "غير مصرح." }));
+app.get("/api/admin/me", authenticate, (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ message: "غير مصرح." });
+  const csrf = req.cookies?.admin_csrf || randomUUID();
+  if (!req.cookies?.admin_csrf) res.cookie('admin_csrf', csrf, { httpOnly:true, secure:process.env.NODE_ENV==='production', sameSite:process.env.COOKIE_SAMESITE||'none', path:'/' });
+  res.json({ ok:true, csrf, user:req.user });
+});
 
 app.get("/api/products", async (_req, res, next) => { try { const r = await query(`SELECT id,title,description,category,category_slugs,audience,image_url,images,sizes,colors,fabrics,old_price,price,rating,reviews,tags,prep_time,badges,COALESCE(badges[1], badge) AS badge,active,selected,sort_order,created_at,updated_at FROM products WHERE active=true ORDER BY sort_order ASC,created_at DESC`); res.json({ products: r.rows }); } catch (e) { next(e); } });
 app.get("/api/categories", async (_req, res, next) => { try { const r = await query(`SELECT * FROM categories WHERE active=true ORDER BY sort_order ASC,name ASC`); res.json({ categories: r.rows }); } catch (e) { next(e); } });
 app.get("/api/notifications", async (_req,res,next)=>{try{const r=await query(`SELECT id,title,message,type,created_at FROM notifications WHERE active=true ORDER BY created_at DESC LIMIT 10`);res.json({notifications:r.rows});}catch(e){next(e)}});
 app.get("/api/account/summary", authenticate, async (req,res,next)=>{try{const u=await query(`SELECT id,name,email,provider,email_verified,created_at,referral_code,points FROM users WHERE id=$1`,[req.user.id]);const orders=await query(`SELECT o.id,o.status,o.total_yer,o.currency,o.created_at,COALESCE(json_agg(json_build_object('name',i.name,'quantity',i.quantity,'size',i.size,'color',i.color,'fabric',i.fabric)) FILTER (WHERE i.id IS NOT NULL),'[]') items FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE o.user_id=$1 GROUP BY o.id ORDER BY o.created_at DESC`,[req.user.id]);const code=u.rows[0]?.referral_code||'';res.json({user:u.rows[0],referralLink:`https://nesma-store.pages.dev/?ref=${encodeURIComponent(code)}`,orders:orders.rows});}catch(e){next(e)}});
-let orderSchemaReady;
-async function ensureOrderSchema() {
-  if (!orderSchemaReady) {
-    orderSchemaReady = (async () => {
-      await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`);
-      await query(`CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL`);
-      await query(`CREATE TABLE IF NOT EXISTS orders(
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        status VARCHAR(30) NOT NULL DEFAULT 'pending',
-        customer_name VARCHAR(150) NOT NULL,
-        phone VARCHAR(50) NOT NULL,
-        city VARCHAR(100) NOT NULL DEFAULT '',
-        address TEXT NOT NULL DEFAULT '',
-        notes TEXT NOT NULL DEFAULT '',
-        currency VARCHAR(3) NOT NULL DEFAULT 'YER',
-        total_yer NUMERIC(14,2) NOT NULL DEFAULT 0,
-        referral_code VARCHAR(32),
-        referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`);
-      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`);
-      await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL`);
-      await query(`CREATE TABLE IF NOT EXISTS order_items(
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-        product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-        name VARCHAR(200) NOT NULL,
-        image_url TEXT NOT NULL DEFAULT '',
-        price_yer NUMERIC(12,2) NOT NULL DEFAULT 0,
-        quantity INTEGER NOT NULL DEFAULT 1,
-        size VARCHAR(100) NOT NULL DEFAULT '',
-        color VARCHAR(100) NOT NULL DEFAULT '',
-        fabric VARCHAR(100) NOT NULL DEFAULT ''
-      )`);
-      // Migrate legacy order_items tables created by older versions of the store.
-      // CREATE TABLE IF NOT EXISTS does not modify an existing table, so every
-      // column used by checkout/account/admin must also be added explicitly.
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS title VARCHAR(200)`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS name VARCHAR(200) NOT NULL DEFAULT ''`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`);
-      // Keep compatibility with legacy order_items where title is NOT NULL and
-      // newer code uses name. Fill both fields and make title safe for future inserts.
-      await query(`UPDATE order_items SET title=COALESCE(NULLIF(title,''),NULLIF(name,''),'منتج') WHERE title IS NULL OR title=''`);
-      await query(`UPDATE order_items SET name=COALESCE(NULLIF(name,''),NULLIF(title,''),'منتج') WHERE name IS NULL OR name=''`);
-      await query(`ALTER TABLE order_items ALTER COLUMN title SET DEFAULT 'منتج'`);
-      await query(`ALTER TABLE order_items ALTER COLUMN name SET DEFAULT 'منتج'`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_yer NUMERIC(12,2) NOT NULL DEFAULT 0`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size VARCHAR(100) NOT NULL DEFAULT ''`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS color VARCHAR(100) NOT NULL DEFAULT ''`);
-      await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS fabric VARCHAR(100) NOT NULL DEFAULT ''`);
-      await query(`CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items(order_id)`);
-    })().catch(error => {
-      orderSchemaReady = null;
-      throw error;
-    });
-  }
-  return orderSchemaReady;
-}
+app.post("/api/orders", async (req,res,next)=>{try{const items=parseCartItems(req.body.items);for(const x of items){if(!x.product_id)throw new Error('بيانات المنتج غير صالحة.');const pr=await query(`SELECT id,title,image_url,price FROM products WHERE id=$1 AND active=true LIMIT 1`,[x.product_id]);if(!pr.rowCount)throw new Error('أحد المنتجات لم يعد متاحاً.');x.price_yer=Number(pr.rows[0].price);x.name=pr.rows[0].title;x.image_url=pr.rows[0].image_url||x.image_url;}const total=items.reduce((sum,x)=>sum+x.price_yer*x.quantity,0);if(!total)return res.status(400).json({message:'إجمالي الطلب غير صالح.'});const referralCode=String(req.body.referral_code||'').trim().toUpperCase()||null;let referralUserId=null;if(referralCode){const rr=await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`,[referralCode]);if(rr.rowCount)referralUserId=rr.rows[0].id;}let userId=null;try{if(req.headers.cookie){/* JWT remains httpOnly; authenticate middleware is intentionally not required for guest checkout. */}}catch{}
+const authToken=req.cookies?.auth_token; if(authToken){try{const jwt=(await import('jsonwebtoken')).default;const payload=jwt.verify(authToken,process.env.JWT_SECRET);userId=payload.sub||null;}catch{}}
+const o=await query(`INSERT INTO orders(user_id,status,customer_name,phone,city,address,notes,currency,total_yer,referral_code,referral_user_id) VALUES($1,'pending',$2,$3,$4,$5,$6,'YER',$7,$8,$9) RETURNING id,status,total_yer,created_at`,[userId,String(req.body.name||'').trim().slice(0,150),String(req.body.phone||'').trim().slice(0,50),String(req.body.city||'').trim().slice(0,100),String(req.body.address||'').trim(),String(req.body.notes||'').trim(),total,referralCode,referralUserId]);
+if(!o.rows[0].id)throw new Error('تعذر إنشاء الطلب.');for(const x of items) await query(`INSERT INTO order_items(order_id,product_id,name,image_url,price_yer,quantity,size,color,fabric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[o.rows[0].id,x.product_id,x.name,x.image_url,x.price_yer,x.quantity,x.size,x.color,x.fabric]);res.status(201).json({order:o.rows[0],message:'تم حفظ الطلب بنجاح.'});}catch(e){next(e)}});
 
-app.post("/api/orders", async (req,res,next)=>{
-  try {
-    try { await ensureOrderSchema(); } catch (schemaError) {
-      console.error("Order schema migration warning:", schemaError);
-      // Continue: the INSERT below detects the columns that actually exist.
-      // This keeps guest checkout working on older/read-only PostgreSQL deployments.
-    }
-    const items=parseCartItems(req.body.items);
-    if (!String(req.body.name||'').trim() || !String(req.body.phone||'').trim() || !String(req.body.city||'').trim() || !String(req.body.address||'').trim()) {
-      return res.status(400).json({message:'أكمل الاسم ورقم الهاتف والمدينة والعنوان.'});
-    }
-    for(const x of items){
-      if(!x.product_id) throw new Error('بيانات المنتج غير صالحة.');
-      const pr=await query(`SELECT id,title,image_url,price FROM products WHERE id=$1 AND active=true LIMIT 1`,[x.product_id]);
-      if(!pr.rowCount) throw new Error('أحد المنتجات لم يعد متاحاً.');
-      x.price_yer=Number(pr.rows[0].price); x.name=pr.rows[0].title; x.image_url=pr.rows[0].image_url||x.image_url;
-    }
-    const total=items.reduce((sum,x)=>sum+x.price_yer*x.quantity,0);
-    if(!Number.isFinite(total)||total<=0) return res.status(400).json({message:'إجمالي الطلب غير صالح.'});
-    const referralCode=String(req.body.referral_code||'').trim().toUpperCase()||null;
-    let referralUserId=null;
-    if(referralCode){
-      try { const rr=await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`,[referralCode]); if(rr.rowCount) referralUserId=rr.rows[0].id; } catch (_) {}
-    }
-    let userId=null;
-    const authToken=req.cookies?.auth_token;
-    if(authToken){try{const jwt=(await import('jsonwebtoken')).default;const payload=jwt.verify(authToken,process.env.JWT_SECRET);userId=payload.sub||null;}catch{}}
-
-    // Some older PostgreSQL deployments may not permit ALTER TABLE during a request.
-    // Detect the actual columns and insert with only columns that exist, while the startup migration
-    // continues to add the referral fields whenever the database user has permission.
-    const cols = await query(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='orders'`);
-    const hasReferralCode = cols.rows.some(r=>r.column_name==='referral_code');
-    const hasReferralUser = cols.rows.some(r=>r.column_name==='referral_user_id');
-    const baseValues=[userId,'pending',String(req.body.name||'').trim().slice(0,150),String(req.body.phone||'').trim().slice(0,50),String(req.body.city||'').trim().slice(0,100),String(req.body.address||'').trim(),String(req.body.notes||'').trim(),'YER',total];
-    let o;
-    if(hasReferralCode && hasReferralUser){
-      o=await query(`INSERT INTO orders(user_id,status,customer_name,phone,city,address,notes,currency,total_yer,referral_code,referral_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,status,total_yer,created_at`,[...baseValues,referralCode,referralUserId]);
-    } else if(hasReferralCode){
-      o=await query(`INSERT INTO orders(user_id,status,customer_name,phone,city,address,notes,currency,total_yer,referral_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,status,total_yer,created_at`,[...baseValues,referralCode]);
-    } else {
-      o=await query(`INSERT INTO orders(user_id,status,customer_name,phone,city,address,notes,currency,total_yer) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,status,total_yer,created_at`,baseValues);
-    }
-    if(!o.rows[0]?.id) throw new Error('تعذر إنشاء الطلب.');
-    for(const x of items) {
-      const itemName = String(x.name || x.title || 'منتج').trim() || 'منتج';
-      const itemImage = String(x.image_url || '').trim();
-      const itemPrice = Number(x.price_yer || x.price || 0) || 0;
-      const itemQty = Math.max(1, Number.parseInt(x.quantity, 10) || 1);
-      const itemSize = String(x.size || '').trim();
-      const itemColor = String(x.color || '').trim();
-      const itemFabric = String(x.fabric || '').trim();
-      await query(
-        `INSERT INTO order_items(order_id,product_id,title,name,image_url,price_yer,quantity,size,color,fabric)
-         VALUES($1,$2,$3,$3,$4,$5,$6,$7,$8,$9)`,
-        [o.rows[0].id,x.product_id || null,itemName,itemImage,itemPrice,itemQty,itemSize,itemColor,itemFabric]
-      );
-    }
-    res.status(201).json({order:o.rows[0],message:'تم حفظ الطلب بنجاح.'});
-  }catch(e){next(e)}
-});
 
 app.get("/api/admin/products", authenticate, requireAdmin, async (_req, res, next) => { try { const r = await query(`SELECT * FROM products ORDER BY sort_order ASC,created_at DESC`); res.json({ products: r.rows }); } catch (e) { next(e); } });
 app.get("/api/admin/categories", authenticate, requireAdmin, async (_req, res, next) => { try { const r = await query(`SELECT * FROM categories ORDER BY sort_order ASC,name ASC`); res.json({ categories: r.rows }); } catch (e) { next(e); } });
@@ -314,49 +217,99 @@ app.post("/api/admin/products/repair-images", authenticate, requireAdmin, async 
 if(replacements.size){const primary=replacements.get(p.image_url)||p.image_url;const images=(p.images||[]).map(x=>replacements.get(x)||x);await query(`UPDATE products SET image_url=$1,images=$2,updated_at=NOW() WHERE id=$3`,[primary,images,p.id]);report.push({product_id:p.id,status:'repaired',count:replacements.size});}}
 await publishToGitHub();res.json({message:'اكتملت محاولة إصلاح الصور.',report});}catch(e){next(e)}});
 
-app.post("/api/admin/products", authenticate, requireAdmin, async (req,res,next)=>{try{const p=cleanProduct(req.body);if(!p.title||!p.price)return res.status(400).json({message:"أدخل اسم المنتج والسعر."});if(!p.image_url&&req.body.image_data){p.image_url=await saveImageToGitHub(req.body.image_data,p.title);}if(req.body.image_data_list?.length){p.images=uniqueStrings([...(p.images||[]),...(await saveImageListToGitHub(req.body.image_data_list,p.title))]);}if(!p.image_url)return res.status(400).json({message:"أضف صورة للمنتج."});const r=await query(`INSERT INTO products(title,description,category,category_slugs,audience,image_url,images,sizes,colors,fabrics,old_price,price,rating,reviews,tags,prep_time,badges,active,selected,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,[p.title,p.description,p.category,p.category_slugs,p.audience,p.image_url,p.images,p.sizes,p.colors,p.fabrics,p.old_price,p.price,p.rating,p.reviews,p.tags,p.prep_time,p.badges,p.active,p.selected,p.sort_order]);await publishToGitHub();res.status(201).json({product:r.rows[0],message:"تم نشر المنتج وتحديث GitHub."});}catch(e){next(e)}});
-app.put("/api/admin/products/:id", authenticate, requireAdmin, async (req,res,next)=>{try{const p=cleanProduct(req.body);if(!p.title||!p.price)return res.status(400).json({message:"أدخل اسم المنتج والسعر."});if(req.body.image_data)p.image_url=await saveImageToGitHub(req.body.image_data,p.title);if(req.body.image_data_list?.length){const oldImages=await query(`SELECT images FROM products WHERE id=$1`,[req.params.id]);p.images=uniqueStrings([...(oldImages.rows[0]?.images||[]),...(p.images||[]),...(await saveImageListToGitHub(req.body.image_data_list,p.title))]);}const r=await query(`UPDATE products SET title=$1,description=$2,category=$3,category_slugs=$4,audience=$5,image_url=COALESCE(NULLIF($6,''),image_url),images=$7,sizes=$8,colors=$9,fabrics=$10,old_price=$11,price=$12,rating=$13,reviews=$14,tags=$15,prep_time=$16,badges=$17,active=$18,selected=$19,sort_order=$20,updated_at=NOW() WHERE id=$21 RETURNING *`,[p.title,p.description,p.category,p.category_slugs,p.audience,p.image_url,p.images,p.sizes,p.colors,p.fabrics,p.old_price,p.price,p.rating,p.reviews,p.tags,p.prep_time,p.badges,p.active,p.selected,p.sort_order,req.params.id]);if(!r.rowCount)return res.status(404).json({message:"المنتج غير موجود."});await publishToGitHub();res.json({product:r.rows[0],message:"تم تحديث المنتج وتحديث GitHub."});}catch(e){next(e)}});
-app.delete("/api/admin/products/:id", authenticate, requireAdmin, async (req,res,next)=>{try{const r=await query("DELETE FROM products WHERE id=$1 RETURNING id",[req.params.id]);if(!r.rowCount)return res.status(404).json({message:"المنتج غير موجود."});await publishToGitHub();res.json({message:"تم حذف المنتج وتحديث GitHub."});}catch(e){next(e)}});
+app.post("/api/admin/products", authenticate, requireAdmin, async (req,res,next)=>{try{const p=cleanProduct(req.body);if(!p.title||!Number.isFinite(p.price)||p.price<0)return res.status(400).json({message:"أدخل اسم المنتج والسعر بشكل صحيح."});if(!p.image_url&&req.body.image_data)p.image_url=await saveImageToGitHub(req.body.image_data,p.title);if(req.body.image_data_list?.length)p.images=uniqueStrings([...(p.images||[]),...(await saveImageListToGitHub(req.body.image_data_list,p.title))]);if(!p.image_url)return res.status(400).json({message:"أضف صورة للمنتج."});const r=await query(`INSERT INTO products(title,title_en,description,short_description,sku,barcode,slug,seo_title,seo_description,category,category_slugs,audience,image_url,images,sizes,colors,fabrics,old_price,price,rating,reviews,tags,prep_time,badges,stock_total,active,selected,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,[p.title,p.title_en,p.description,p.short_description,p.sku||null,p.barcode||null,p.slug||safeFileName(p.title),p.seo_title,p.seo_description,p.category,p.category_slugs,p.audience,p.image_url,p.images,p.sizes,p.colors,p.fabrics,p.old_price,p.price,p.rating,p.reviews,p.tags,p.prep_time,p.badges,p.stock_total,p.active,p.selected,p.sort_order]);await audit(req,'product.create','product',r.rows[0].id,'إضافة منتج',null,r.rows[0]);await publishToGitHub();res.status(201).json({product:r.rows[0],message:"تم حفظ المنتج ونشره."});}catch(e){next(e)}});
+app.put("/api/admin/products/:id", authenticate, requireAdmin, async (req,res,next)=>{try{const p=cleanProduct(req.body);if(!p.title||!Number.isFinite(p.price)||p.price<0)return res.status(400).json({message:"أدخل اسم المنتج والسعر بشكل صحيح."});const old=await query(`SELECT * FROM products WHERE id=$1`,[req.params.id]);if(!old.rowCount)return res.status(404).json({message:"المنتج غير موجود."});if(req.body.image_data)p.image_url=await saveImageToGitHub(req.body.image_data,p.title);if(req.body.image_data_list?.length)p.images=uniqueStrings([...(old.rows[0].images||[]),...(p.images||[]),...(await saveImageListToGitHub(req.body.image_data_list,p.title))]);const r=await query(`UPDATE products SET title=$1,title_en=$2,description=$3,short_description=$4,sku=$5,barcode=$6,slug=$7,seo_title=$8,seo_description=$9,category=$10,category_slugs=$11,audience=$12,image_url=COALESCE(NULLIF($13,''),image_url),images=$14,sizes=$15,colors=$16,fabrics=$17,old_price=$18,price=$19,rating=$20,reviews=$21,tags=$22,prep_time=$23,badges=$24,stock_total=$25,active=$26,selected=$27,sort_order=$28,updated_at=NOW() WHERE id=$29 RETURNING *`,[p.title,p.title_en,p.description,p.short_description,p.sku||null,p.barcode||null,p.slug||safeFileName(p.title),p.seo_title,p.seo_description,p.category,p.category_slugs,p.audience,p.image_url,p.images,p.sizes,p.colors,p.fabrics,p.old_price,p.price,p.rating,p.reviews,p.tags,p.prep_time,p.badges,p.stock_total,p.active,p.selected,p.sort_order,req.params.id]);if(!r.rowCount)return res.status(404).json({message:"المنتج غير موجود."});await audit(req,'product.update','product',req.params.id,'تعديل منتج',old.rows[0],r.rows[0]);await publishToGitHub();res.json({product:r.rows[0],message:"تم تحديث المنتج ونشره."});}catch(e){next(e)}});
+app.delete("/api/admin/products/:id", authenticate, requireAdmin, async (req,res,next)=>{try{const r=await query("UPDATE products SET deleted_at=NOW(),active=false,updated_at=NOW() WHERE id=$1 AND deleted_at IS NULL RETURNING id",[req.params.id]);if(!r.rowCount)return res.status(404).json({message:"المنتج غير موجود."});await publishToGitHub();res.json({message:"تم نقل المنتج إلى سلة المحذوفات."});}catch(e){next(e)}});
 app.post("/api/admin/github/publish", authenticate, requireAdmin, async (_req,res,next)=>{try{res.json({message:"تم نشر البيانات في GitHub.",github:await publishToGitHub()});}catch(e){next(e)}});
 app.get("/api/admin/github/status", authenticate, requireAdmin, async (_req,res)=>{const c=githubConfig();res.json({connected:c.enabled,repository:c.enabled?`${c.owner}/${c.repo}`:"",branch:c.branch,path:c.pathName});});
 
 async function saveImageToGitHub(dataUrl,title){const m=String(dataUrl||"").match(/^data:(image\/(?:jpeg|png|webp|gif));base64,(.+)$/);if(!m)throw new Error("صورة المنتج غير صالحة.");const ext=m[1].split("/")[1].replace("jpeg","jpg");const filePath=`public/images/products/${safeFileName(title)}-${Date.now()}.${ext}`;await githubPutFile(filePath,Buffer.from(m[2],"base64"),`إضافة صورة المنتج: ${title}`);const c=githubConfig();return `/${filePath.replace(/^public\//,"")}`;}
 
+
+// ========================= NESMA ADMIN PLATFORM =========================
+async function ensureAdminPlatform(){
+  const statements=[
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS title_en VARCHAR(200) NOT NULL DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS short_description TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(100)`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode VARCHAR(100)`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS slug VARCHAR(180)`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_title VARCHAR(255) NOT NULL DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS seo_description TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_total INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS products_sku_idx ON products(sku) WHERE sku IS NOT NULL AND sku<>''`,
+  `CREATE TABLE IF NOT EXISTS product_variants(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,color VARCHAR(100) NOT NULL DEFAULT '',size VARCHAR(100) NOT NULL DEFAULT '',sku VARCHAR(100),price NUMERIC(12,2),stock INTEGER NOT NULL DEFAULT 0,reserved INTEGER NOT NULL DEFAULT 0,image_url TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE INDEX IF NOT EXISTS product_variants_product_idx ON product_variants(product_id,color,size)`,
+  `CREATE TABLE IF NOT EXISTS badges(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),name VARCHAR(80) NOT NULL UNIQUE,color VARCHAR(30) NOT NULL DEFAULT '#d9b45c',icon VARCHAR(80) NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS inventory_movements(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),product_id UUID REFERENCES products(id) ON DELETE SET NULL,variant_id UUID REFERENCES product_variants(id) ON DELETE SET NULL,delta INTEGER NOT NULL,reason VARCHAR(120) NOT NULL,reference_id UUID,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS store_settings(key VARCHAR(120) PRIMARY KEY,value TEXT NOT NULL DEFAULT '',type VARCHAR(30) NOT NULL DEFAULT 'text',updated_by UUID REFERENCES users(id) ON DELETE SET NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS site_content(key VARCHAR(120) PRIMARY KEY,payload JSONB NOT NULL DEFAULT '{}'::jsonb,status VARCHAR(20) NOT NULL DEFAULT 'published',publish_at TIMESTAMPTZ,unpublish_at TIMESTAMPTZ,updated_by UUID REFERENCES users(id) ON DELETE SET NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS coupons(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),code VARCHAR(80) NOT NULL UNIQUE,discount_type VARCHAR(20) NOT NULL DEFAULT 'percent',discount_value NUMERIC(12,2) NOT NULL DEFAULT 0,min_order NUMERIC(12,2) NOT NULL DEFAULT 0,max_discount NUMERIC(12,2),starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,max_uses INTEGER,max_uses_per_customer INTEGER,used_count INTEGER NOT NULL DEFAULT 0,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS coupon_products(coupon_id UUID REFERENCES coupons(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE CASCADE,PRIMARY KEY(coupon_id,product_id))`,
+  `CREATE TABLE IF NOT EXISTS audit_logs(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),admin_user_id UUID REFERENCES users(id) ON DELETE SET NULL,admin_email VARCHAR(255),action VARCHAR(120) NOT NULL,resource_type VARCHAR(80) NOT NULL,resource_id VARCHAR(120),old_value JSONB,new_value JSONB,description TEXT NOT NULL DEFAULT '',ip VARCHAR(80),user_agent TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs(created_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS navigation_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),location VARCHAR(30) NOT NULL DEFAULT 'main',label VARCHAR(120) NOT NULL,href VARCHAR(500) NOT NULL DEFAULT '#',icon VARCHAR(80) NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS backups(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),kind VARCHAR(30) NOT NULL,location TEXT,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS admins(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE,role VARCHAR(40) NOT NULL DEFAULT 'admin',permissions JSONB NOT NULL DEFAULT '{}'::jsonb,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS wishlist_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID REFERENCES users(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(user_id,product_id))`,
+  `CREATE TABLE IF NOT EXISTS cart_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID REFERENCES users(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE CASCADE,quantity INTEGER NOT NULL DEFAULT 1,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(user_id,product_id))`
+  ];
+  for(const sql of statements) await query(sql);
+  const defaults={store_name_ar:'نسمة',store_name_en:'NESMA',store_description:'متجر عبايات نسمة',default_currency:'YER',rate_sar:'70',rate_usd:'540',shipping_fee:'0',free_shipping_min:'0',shipping_duration:'2-5 أيام',whatsapp_number:'',whatsapp_order_message:'مرحباً، أريد تأكيد طلبي رقم {order_id}',seo_title:'نسمة | NESMA STORE',seo_description:'متجر نسمة للعبايات'};
+  for(const [key,value] of Object.entries(defaults)) await query(`INSERT INTO store_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING`,[key,value]);
+  for(const b of [['جديد','#d9b45c','✦'],['الأكثر مبيعاً','#d9b45c','★'],['يباع سريعاً','#b98b35','⚡'],['كمية محدودة','#d77b70','!'],['عرض خاص','#88c77c','%'],['حصري','#d9b45c','◆']]) await query(`INSERT INTO badges(name,color,icon) VALUES($1,$2,$3) ON CONFLICT(name) DO NOTHING`,b);
+}
+async function audit(req,action,type,id,description,oldValue=null,newValue=null){query(`INSERT INTO audit_logs(admin_user_id,admin_email,action,resource_type,resource_id,description,old_value,new_value,ip,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[req.user?.id,req.user?.email,action,type,id,description,oldValue?JSON.stringify(oldValue):null,newValue?JSON.stringify(newValue):null,req.ip||'',String(req.headers['user-agent']||'').slice(0,500)]).catch(()=>{})}
+function parseMaybeJSON(v){try{return JSON.parse(v)}catch{return v}}
+
+app.get('/api/admin/dashboard',authenticate,requireAdmin,async(req,res,next)=>{try{const days=Math.min(90,Math.max(1,Number(req.query.days)||7));const [s,o,p,c,n,t,w,ci]=await Promise.all([
+ query(`SELECT COALESCE(SUM(total_yer),0)::numeric sales_total,COALESCE(SUM(total_yer) FILTER(WHERE created_at::date=CURRENT_DATE),0)::numeric sales_today,COALESCE(SUM(total_yer) FILTER(WHERE created_at>=date_trunc('month',CURRENT_DATE)),0)::numeric sales_month,COUNT(*)::int orders_total,COUNT(*) FILTER(WHERE status IN('pending','confirmed'))::int orders_new FROM orders`),
+ query(`SELECT status,COUNT(*)::int count FROM orders GROUP BY status`),query(`SELECT COUNT(*)::int products,COUNT(*) FILTER(WHERE active AND deleted_at IS NULL)::int products_active,COUNT(*) FILTER(WHERE stock_total BETWEEN 1 AND 5 AND deleted_at IS NULL)::int low_stock FROM products`),query(`SELECT COUNT(*)::int customers,COUNT(*) FILTER(WHERE created_at>=CURRENT_DATE-INTERVAL '30 days')::int new_customers FROM users`),query(`SELECT COALESCE(SUM(quantity),0)::int wishlist_items FROM wishlist_items`),query(`SELECT COALESCE(SUM(quantity),0)::int cart_items FROM cart_items`),query(`SELECT COALESCE(SUM(oi.quantity),0)::int quantity,COALESCE(SUM(oi.quantity*oi.price_yer),0)::numeric revenue,p.title FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id JOIN orders o ON o.id=oi.order_id WHERE o.status IN('completed','delivered') GROUP BY p.id,p.title ORDER BY quantity DESC LIMIT 8`),query(`SELECT to_char(d,'DD Mon') day,COALESCE(SUM(o.total_yer),0)::numeric total FROM generate_series(CURRENT_DATE-($1::int-1),CURRENT_DATE,'1 day') d LEFT JOIN orders o ON o.created_at::date=d AND o.status NOT IN('cancelled','returned') GROUP BY d ORDER BY d`,[days])]);
+ const activity=await query(`SELECT action,description,created_at FROM audit_logs ORDER BY created_at DESC LIMIT 12`);res.json({stats:{...s.rows[0],...p.rows[0],...c.rows[0],...n.rows[0],...t.rows[0],...ci.rows[0]},statuses:o.rows.map(x=>({label:statusLabelAdmin(x.status),count:x.count})),top_products:w.rows,sales:normRows(ci.rows),activity:activity.rows});}catch(e){next(e)}});
+function normRows(r){return r} function statusLabelAdmin(s){return ({pending:'جديد',confirmed:'مؤكد',processing:'تجهيز',shipped:'شحن',delivered:'تسليم',completed:'مكتمل',cancelled:'ملغي',returned:'مرتجع'})[s]||s}
+
+app.get('/api/admin/inventory',authenticate,requireAdmin,async(_req,res,next)=>{try{const r=await query(`SELECT p.id,p.id::text||'-base' item_id,p.title,'' color,'' size,p.stock_total available,0 reserved FROM products p WHERE p.deleted_at IS NULL UNION ALL SELECT v.id,v.id::text,p.title,v.color,v.size,v.stock,v.reserved FROM product_variants v JOIN products p ON p.id=v.product_id WHERE v.active AND p.deleted_at IS NULL ORDER BY title,color,size`);const items=r.rows.map(x=>({...x,id:x.item_id}));res.json({items,stats:{total:items.reduce((a,x)=>a+Number(x.available||0),0),low:items.filter(x=>x.available>0&&x.available<=5).length,out:items.filter(x=>x.available<=0).length,reserved:items.reduce((a,x)=>a+Number(x.reserved||0),0)}})}catch(e){next(e)}});
+app.put('/api/admin/inventory/:id',authenticate,requireAdmin,async(req,res,next)=>{try{const id=req.params.id;const available=Math.max(0,Number(req.body.available)||0);if(id.endsWith('-base')){const pid=id.replace(/-base$/,'');const r=await query(`UPDATE products SET stock_total=$1,updated_at=NOW() WHERE id=$2 RETURNING *`,[available,pid]);if(!r.rowCount)return res.status(404).json({message:'المنتج غير موجود.'});await audit(req,'inventory.update','product',pid,'تحديث المخزون',null,{available});return res.json({item:r.rows[0]})}const r=await query(`UPDATE product_variants SET stock=$1,updated_at=NOW() WHERE id=$2 RETURNING *`,[available,id]);if(!r.rowCount)return res.status(404).json({message:'المتغير غير موجود.'});await audit(req,'inventory.update','variant',id,'تحديث مخزون المتغير',null,{available});res.json({item:r.rows[0]})}catch(e){next(e)}});
+
+app.get('/api/admin/taxonomy',authenticate,requireAdmin,async(_req,res,next)=>{try{const [c,b]=await Promise.all([query(`SELECT * FROM categories ORDER BY sort_order,name`),query(`SELECT * FROM badges WHERE active ORDER BY sort_order,name`)]);res.json({categories:c.rows,badges:b.rows})}catch(e){next(e)}});
+app.post('/api/admin/badges',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`INSERT INTO badges(name,color,icon,sort_order,active) VALUES($1,$2,$3,$4,true) RETURNING *`,[String(req.body.name||'').trim(),String(req.body.color||'#d9b45c'),String(req.body.icon||''),Number(req.body.sort_order||0)]);await audit(req,'badge.create','badge',r.rows[0].id,'إنشاء شارة',null,r.rows[0]);res.status(201).json({badge:r.rows[0]})}catch(e){next(e)}});
+app.delete('/api/admin/badges/:id',authenticate,requireAdmin,async(req,res,next)=>{try{await query(`UPDATE badges SET active=false WHERE id=$1`,[req.params.id]);await audit(req,'badge.delete','badge',req.params.id,'تعطيل شارة');res.json({ok:true})}catch(e){next(e)}});
+
+app.get('/api/admin/customers',authenticate,requireAdmin,async(req,res,next)=>{try{const q=String(req.query.q||'').trim();const provider=String(req.query.provider||'all');const params=[];const where=[];if(q){params.push(`%${q}%`);where.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`)}if(provider!=='all'){params.push(provider);where.push(`u.provider=$${params.length}`)}const r=await query(`SELECT u.id,u.name,u.email,u.provider,u.created_at,u.points,COUNT(o.id)::int orders_count,COALESCE(SUM(o.total_yer) FILTER(WHERE o.status NOT IN('cancelled','returned')),0)::numeric spent,MAX(o.created_at) last_order FROM users u LEFT JOIN orders o ON o.user_id=u.id ${where.length?'WHERE '+where.join(' AND '):''} GROUP BY u.id ORDER BY u.created_at DESC LIMIT 200`,params);res.json({customers:r.rows})}catch(e){next(e)}});
+
+app.get('/api/admin/orders',authenticate,requireAdmin,async(req,res,next)=>{try{const p=[];const w=[];if(req.query.status&&req.query.status!=='all'){p.push(req.query.status);w.push(`o.status=$${p.length}`)}if(req.query.q){p.push(`%${String(req.query.q)}%`);w.push(`(o.customer_name ILIKE $${p.length} OR o.phone ILIKE $${p.length} OR o.id::text ILIKE $${p.length})`)}if(req.query.from){p.push(req.query.from);w.push(`o.created_at::date >= $${p.length}::date`)}if(req.query.to){p.push(req.query.to);w.push(`o.created_at::date <= $${p.length}::date`)}const r=await query(`SELECT o.*,COUNT(i.id)::int items_count,COALESCE(SUM(i.quantity),0)::int units FROM orders o LEFT JOIN order_items i ON i.order_id=o.id ${w.length?'WHERE '+w.join(' AND '):''} GROUP BY o.id ORDER BY o.created_at DESC LIMIT 300`,p);res.json({orders:r.rows})}catch(e){next(e)}});
+app.get('/api/admin/orders/:id',authenticate,requireAdmin,async(req,res,next)=>{try{const o=await query(`SELECT * FROM orders WHERE id=$1`,[req.params.id]);if(!o.rowCount)return res.status(404).json({message:'الطلب غير موجود.'});const i=await query(`SELECT * FROM order_items WHERE order_id=$1 ORDER BY id`,[req.params.id]);res.json({order:{...o.rows[0],items:i.rows}})}catch(e){next(e)}});
+
+app.get('/api/admin/settings',authenticate,requireAdmin,async(_req,res,next)=>{try{const r=await query(`SELECT key,value,type,updated_at FROM store_settings ORDER BY key`);res.json({settings:r.rows})}catch(e){next(e)}});
+app.put('/api/admin/settings',authenticate,requireAdmin,async(req,res,next)=>{try{for(const [key,value] of Object.entries(req.body||{})){if(!/^[a-zA-Z0-9_.-]{1,120}$/.test(key))continue;await query(`INSERT INTO store_settings(key,value,updated_by,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=NOW()`,[key,String(value??''),req.user.id]);}await audit(req,'settings.update','settings',null,'تحديث إعدادات المتجر',null,req.body);res.json({ok:true})}catch(e){next(e)}});
+app.put('/api/admin/profile',authenticate,requireAdmin,async(req,res,next)=>{try{const name=String(req.body.name||'').trim().slice(0,100);const email=String(req.body.email||'').trim().toLowerCase();if(!name||!email)return res.status(400).json({message:'الاسم والبريد مطلوبان.'});const old=await query(`SELECT id,name,email FROM users WHERE id=$1`,[req.user.id]);const r=await query(`UPDATE users SET name=$1,email=$2,updated_at=NOW() WHERE id=$3 RETURNING id,name,email,provider,email_verified,created_at`,[name,email,req.user.id]);await audit(req,'profile.update','user',req.user.id,'تعديل بيانات المدير',old.rows[0],r.rows[0]);res.json({user:r.rows[0],message:'تم حفظ بيانات المدير. قد تحتاج لإعادة تسجيل الدخول بعد تغيير البريد.'})}catch(e){next(e)}});
+
+const contentDefaults={homepage:{hero_title:'نسمة | NESMA',hero_description:'عبايات بتفاصيل تليق بك',sections:[]},pages:{pages:[{slug:'about',title:'من نحن',content:''},{slug:'privacy',title:'سياسة الخصوصية',content:''},{slug:'terms',title:'الشروط والأحكام',content:''},{slug:'returns',title:'الاستبدال والاسترجاع',content:''},{slug:'shipping',title:'الشحن',content:''},{slug:'faq',title:'الأسئلة الشائعة',content:''}]},navigation:{main:[],bottom:[]},footer:{description:'',links:[],social:[]}};
+app.get('/api/admin/content/:type',authenticate,requireAdmin,async(req,res,next)=>{try{const type=req.params.type;const r=await query(`SELECT payload,status,publish_at,unpublish_at FROM site_content WHERE key=$1`,[type]);const payload=r.rows[0]?.payload||contentDefaults[type]||{};res.json({content:payload,html:`<div><h2>${escServer(type)}</h2><p class="muted">هذا محرر المحتوى الديناميكي. البيانات تحفظ في Neon ولا تعتمد على JavaScript ثابت.</p><textarea data-content-field="json" style="width:100%;min-height:320px;background:#121212;color:#fff;border:1px solid #333;border-radius:12px;padding:15px;font-family:monospace">${escServer(JSON.stringify(payload,null,2))}</textarea><button class="btn primary" data-content-save style="margin-top:12px">حفظ المحتوى</button></div>`})}catch(e){next(e)}});
+app.put('/api/admin/content/:type',authenticate,requireAdmin,async(req,res,next)=>{try{let payload=req.body; if(req.body.json)payload=parseMaybeJSON(req.body.json);await query(`INSERT INTO site_content(key,payload,status,updated_by,updated_at) VALUES($1,$2,'published',$3,NOW()) ON CONFLICT(key) DO UPDATE SET payload=EXCLUDED.payload,status='published',updated_by=EXCLUDED.updated_by,updated_at=NOW()`,[req.params.type,JSON.stringify(payload),req.user.id]);await audit(req,'content.publish','content',req.params.type,'نشر محتوى الموقع',null,payload);res.json({ok:true})}catch(e){next(e)}});
+function escServer(v){return String(v??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+
+app.get('/api/admin/marketing',authenticate,requireAdmin,async(_req,res,next)=>{try{const [c,s]=await Promise.all([query(`SELECT * FROM coupons ORDER BY created_at DESC`),query(`SELECT key,value FROM store_settings WHERE key LIKE 'whatsapp_%'`)]);res.json({coupons:c.rows,settings:s.rows})}catch(e){next(e)}});
+app.post('/api/admin/coupons',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`INSERT INTO coupons(code,discount_type,discount_value,min_order,starts_at,ends_at,active) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[String(req.body.code||'').trim().toUpperCase(),req.body.discount_type==='fixed'?'fixed':'percent',Number(req.body.discount_value||0),Number(req.body.min_order||0),req.body.starts_at||null,req.body.ends_at||null,req.body.active!==false]);await audit(req,'coupon.create','coupon',r.rows[0].id,'إنشاء كوبون',null,r.rows[0]);res.status(201).json({coupon:r.rows[0]})}catch(e){next(e)}});
+app.post('/api/admin/coupons/:id/toggle',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`UPDATE coupons SET active=NOT active,updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id]);res.json({coupon:r.rows[0]})}catch(e){next(e)}});
+
+app.post('/api/admin/products/bulk',authenticate,requireAdmin,async(req,res,next)=>{try{const ids=Array.isArray(req.body.ids)?req.body.ids:[];const action=req.body.action; if(!ids.length)return res.status(400).json({message:'حدد منتجات.'});if(action==='hide'||action==='show')await query(`UPDATE products SET active=$1,updated_at=NOW() WHERE id=ANY($2::uuid[])`,[action==='show',ids]);else if(action==='delete')await query(`UPDATE products SET deleted_at=NOW(),active=false,updated_at=NOW() WHERE id=ANY($1::uuid[])`,[ids]);else if(action==='restore')await query(`UPDATE products SET deleted_at=NULL,active=true,updated_at=NOW() WHERE id=ANY($1::uuid[])`,[ids]);else return res.status(400).json({message:'عملية غير مدعومة.'});await audit(req,'products.bulk','product',null,'عملية جماعية',{ids,action});await publishToGitHub();res.json({ok:true})}catch(e){next(e)}});
+app.post('/api/admin/products/:id/restore',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`UPDATE products SET deleted_at=NULL,active=true,updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id]);if(!r.rowCount)return res.status(404).json({message:'المنتج غير موجود.'});await audit(req,'product.restore','product',req.params.id,'استعادة منتج');await publishToGitHub();res.json({product:r.rows[0]})}catch(e){next(e)}});
+
+app.get('/api/admin/audit-logs',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500`);res.json({logs:r.rows})}catch(e){next(e)}});
+app.get('/api/admin/health',authenticate,requireAdmin,async(_req,res,next)=>{try{await query('SELECT 1');const g=githubConfig();const b=await query(`SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1`);res.json({database:'متصل',api:'يعمل',github:g.enabled?'متصل':'غير مربوط',last_backup:b.rows[0]?.created_at?new Date(b.rows[0].created_at).toLocaleString('ar'):'لم يتم بعد',errors:[]})}catch(e){next(e)}});
+app.post('/api/admin/backup',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`INSERT INTO backups(kind,location,created_by) VALUES('database','managed-neon', $1) RETURNING *`,[req.user.id]);await audit(req,'backup.create','backup',r.rows[0].id,'إنشاء سجل نسخة احتياطية');res.json({backup:r.rows[0],message:'تم تسجيل النسخة الاحتياطية. النسخ الفعلية لقاعدة Neon تُدار عبر أدوات Neon/الخادم.'})}catch(e){next(e)}});
+
+app.get('/api/public/settings',async(_req,res,next)=>{try{const r=await query(`SELECT key,value FROM store_settings`);res.json({settings:Object.fromEntries(r.rows.map(x=>[x.key,x.value]))})}catch(e){next(e)}});
+app.get('/api/public/content/:type',async(req,res,next)=>{try{const r=await query(`SELECT payload,status,publish_at,unpublish_at FROM site_content WHERE key=$1 AND status='published' AND (publish_at IS NULL OR publish_at<=NOW()) AND (unpublish_at IS NULL OR unpublish_at>NOW())`,[req.params.type]);res.json({content:r.rows[0]?.payload||{}})}catch(e){next(e)}});
 app.use(express.static(path.join(__dirname,"..","public")));
 app.get("/{*splat}",(_req,res)=>res.sendFile(path.join(__dirname,"..","public","index.html")));
 app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({message:err.message||"حدث خطأ في الخادم."});});
 
-async function ensureCoreAuthTables() {
-  await query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
-  await query(`CREATE TABLE IF NOT EXISTS users(
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash TEXT,
-    provider VARCHAR(20) NOT NULL DEFAULT 'local',
-    provider_id VARCHAR(255),
-    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    referral_code VARCHAR(32),
-    points INTEGER NOT NULL DEFAULT 0
-  )`);
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`);
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0`);
-  await query(`CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL`);
-  await query(`CREATE TABLE IF NOT EXISTS password_reset_tokens(
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash TEXT NOT NULL UNIQUE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-}
-
 async function ensureProductTable(){
   await query(`CREATE TABLE IF NOT EXISTS products(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title VARCHAR(200) NOT NULL,description TEXT NOT NULL DEFAULT '',category VARCHAR(100) NOT NULL DEFAULT 'عام',category_slugs TEXT[] NOT NULL DEFAULT ARRAY['عام'],audience VARCHAR(20) NOT NULL DEFAULT 'women',image_url TEXT NOT NULL,images TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],sizes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],colors TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],fabrics TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],old_price NUMERIC(12,2),price NUMERIC(12,2) NOT NULL DEFAULT 0,rating NUMERIC(3,2) NOT NULL DEFAULT 5.0,reviews INTEGER NOT NULL DEFAULT 0,tags TEXT NOT NULL DEFAULT '',prep_time INTEGER NOT NULL DEFAULT 10,badges TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],active BOOLEAN NOT NULL DEFAULT TRUE,selected BOOLEAN NOT NULL DEFAULT FALSE,sort_order INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS badge VARCHAR(100)`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category_slugs TEXT[] NOT NULL DEFAULT ARRAY['عام']`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS colors TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS fabrics TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS badges TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS selected BOOLEAN NOT NULL DEFAULT FALSE`);
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category_slugs TEXT[] NOT NULL DEFAULT ARRAY['عام']`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sizes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS colors TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS fabrics TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS badges TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`); await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS selected BOOLEAN NOT NULL DEFAULT FALSE`);
   await query(`UPDATE products SET category_slugs=ARRAY[category] WHERE category_slugs IS NULL OR cardinality(category_slugs)=0`);
   await query(`UPDATE products SET badges=CASE WHEN badge IS NOT NULL AND badge<>'' THEN ARRAY[badge] ELSE ARRAY[]::TEXT[] END WHERE cardinality(badges)=0 AND badge IS NOT NULL`);
   await query(`CREATE TABLE IF NOT EXISTS categories(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),name VARCHAR(100) NOT NULL,slug VARCHAR(120) UNIQUE NOT NULL,image_url TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,sort_order INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -367,30 +320,11 @@ async function ensureProductTable(){
   await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`);
   await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL`);
   await query(`CREATE TABLE IF NOT EXISTS order_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE SET NULL,name VARCHAR(200) NOT NULL,image_url TEXT NOT NULL DEFAULT '',price_yer NUMERIC(12,2) NOT NULL DEFAULT 0,quantity INTEGER NOT NULL DEFAULT 1,size VARCHAR(100) NOT NULL DEFAULT '',color VARCHAR(100) NOT NULL DEFAULT '',fabric VARCHAR(100) NOT NULL DEFAULT '')`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS name VARCHAR(200) NOT NULL DEFAULT ''`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price_yer NUMERIC(12,2) NOT NULL DEFAULT 0`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size VARCHAR(100) NOT NULL DEFAULT ''`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS color VARCHAR(100) NOT NULL DEFAULT ''`);
-  await query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS fabric VARCHAR(100) NOT NULL DEFAULT ''`);
-  await query(`CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items(order_id)`);
   await query(`CREATE TABLE IF NOT EXISTS points_ledger(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,points INTEGER NOT NULL,reason VARCHAR(100) NOT NULL,order_id UUID REFERENCES orders(id) ON DELETE SET NULL,referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id,order_id,reason) WHERE order_id IS NOT NULL`);
   await query(`CREATE TABLE IF NOT EXISTS notifications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title VARCHAR(200) NOT NULL,message TEXT NOT NULL DEFAULT '',type VARCHAR(30) NOT NULL DEFAULT 'info',active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
-  // Upgrade notification tables created by older versions. CREATE TABLE IF NOT EXISTS
-  // does not add missing columns to an existing table.
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS title VARCHAR(200)`);
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS message TEXT NOT NULL DEFAULT ''`);
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'info'`);
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE`);
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
-  await query(`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
-  await query(`UPDATE notifications SET title=COALESCE(NULLIF(title,''),'إشعار') WHERE title IS NULL OR title=''`);
-  await query(`UPDATE notifications SET message=COALESCE(message,'') WHERE message IS NULL`);
-  await query(`UPDATE notifications SET type=COALESCE(NULLIF(type,''),'info') WHERE type IS NULL OR type=''`);
   await query(`UPDATE users SET referral_code='NESMA-'||UPPER(SUBSTRING(REPLACE(id::text,'-',''),1,6)) WHERE referral_code IS NULL`);
+  await ensureAdminPlatform();
 }
 
-app.listen(port,async()=>{console.log(`Auth server running on http://localhost:${port}`);try{await ensureCoreAuthTables();await ensureProductTable();await ensureOrderSchema();console.log("Database auth/products/orders schema ready.")}catch(e){console.error("Database setup failed:",e);}});
+app.listen(port,async()=>{console.log(`Auth server running on http://localhost:${port}`);try{await ensureProductTable();console.log("Products/categories tables ready.")}catch(e){console.error("Database setup failed:",e.message);}});

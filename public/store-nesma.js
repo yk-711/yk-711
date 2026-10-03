@@ -12,11 +12,31 @@
   const overlay = document.getElementById('searchOv');
   const closeSearch = document.getElementById('searchClose');
 
+
+  async function applyManagedSite(){
+    try {
+      const [sr,cr]=await Promise.all([fetch(`${API}/api/public/settings`).then(r=>r.ok?r.json():{}),fetch(`${API}/api/public/content/homepage`).then(r=>r.ok?r.json():{})]);
+      const settings=sr.settings||{}, content=cr.content||{};
+      document.title=settings.seo_title||document.title;
+      const desc=document.querySelector('meta[name="description"]'); if(desc&&settings.seo_description) desc.setAttribute('content',settings.seo_description);
+      document.querySelectorAll('[data-store-name]').forEach(x=>x.textContent=settings.store_name_ar||'نسمة');
+      const heroTitle=document.querySelector('#hero h1, #hero h2'); if(heroTitle&&content.hero_title)heroTitle.textContent=content.hero_title;
+      const heroDesc=document.querySelector('#hero p'); if(heroDesc&&content.hero_description)heroDesc.textContent=content.hero_description;
+      const selectedTitle=document.querySelector('#sutoolSelectedSection .section-heading h2'); if(selectedTitle&&content.selected_title)selectedTitle.textContent=content.selected_title;
+      const catTitle=document.querySelector('.nesma-home-category-showcase__hero h2'); if(catTitle&&content.category_showcase_title)catTitle.textContent=content.category_showcase_title;
+      const catDesc=document.querySelector('.nesma-home-category-showcase__hero p'); if(catDesc&&content.category_showcase_description)catDesc.textContent=content.category_showcase_description;
+      const slides=Array.isArray(content.slides)?content.slides:[];
+      const track=document.querySelector('#nesmaImageSlider .nesma-slider-addon__track');
+      if(track&&slides.length){track.innerHTML=slides.filter(x=>x.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(x=>`<div class="nesma-slider-addon__slide"><a href="${String(x.link||'#').replace(/"/g,'&quot;')}"><img src="${String(x.image||'').replace(/"/g,'&quot;')}" alt="${String(x.alt||x.title||'').replace(/"/g,'&quot;')}" loading="lazy"></a></div>`).join('');}
+    } catch {}
+  }
+  applyManagedSite();
+
   const referral=new URLSearchParams(location.search).get('ref'); if(referral&&/^NESMA-[A-Z0-9]+$/i.test(referral)) localStorage.setItem('nesma-referral-code',referral.toUpperCase());
 
   accountBtn?.addEventListener('click', async e => {
     e.preventDefault();
-    try { const token=localStorage.getItem('nesma_auth_token')||''; const r = await fetch(`${API}/api/auth/me`, {credentials:'include',headers:token?{Authorization:`Bearer ${token}`}:{}}); location.href = r.ok ? 'account.html' : 'login.html'; }
+    try { const r = await fetch(`${API}/api/auth/me`, {credentials:'include'}); location.href = r.ok ? 'account.html' : 'login.html'; }
     catch { location.href = 'login.html'; }
   });
   cartFab?.addEventListener('click', () => { location.href = 'cart.html'; });

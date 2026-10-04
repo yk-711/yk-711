@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-04T03:42:44.472Z",
+  "generated_at": "2026-10-04T03:43:53.160Z",
   "categories": [
     {
       "id": "1eefada9-c7d2-4808-b58f-fd57a28fe0de",
@@ -59,11 +59,18 @@
       "category": "عبايات",
       "category_slugs": [
         "عبايات",
-        "وصل حديثاً"
+        "وصل حديثاً",
+        "الأكثر مبيعاً",
+        "العروض"
       ],
       "audience": "women",
-      "image_url": "/images/products/يدات-مسيم-1791085247566.webp",
-      "images": [],
+      "image_url": "/images/products/يدات-مسيم-1791085426486.webp",
+      "images": [
+        "/images/products/يدات-مسيم-1791085427924.webp",
+        "/images/products/يدات-مسيم-1791085429135.webp",
+        "/images/products/يدات-مسيم-1791085430472.webp",
+        "/images/products/يدات-مسيم-1791085431893.webp"
+      ],
       "sizes": [
         "52",
         "54",
@@ -89,7 +96,7 @@
       "selected": true,
       "sort_order": 0,
       "created_at": "2026-10-03T20:50:18.114Z",
-      "updated_at": "2026-10-04T03:42:44.443Z"
+      "updated_at": "2026-10-04T03:43:53.133Z"
     },
     {
       "id": "7a00923b-41ca-43df-857e-dfd4eb2564cd",

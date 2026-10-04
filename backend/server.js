@@ -16,11 +16,13 @@ const app = express();
 app.set("trust proxy", 1);
 const port = Number(process.env.PORT || 3000);
 app.disable("x-powered-by");
-app.use(express.json({ limit: "24mb" }));
+app.use(express.json({ limit: "12mb" }));
 app.use(cookieParser());
 const configuredFrontend = String(process.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
 const allowedOrigins = new Set([
   "https://nesma-store.pages.dev",
+  "https://nesma-store.com",
+  "https://www.nesma-store.com",
   configuredFrontend,
   `http://localhost:${port}`,
   "http://127.0.0.1:" + port
@@ -28,20 +30,25 @@ const allowedOrigins = new Set([
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    if (!origin || allowedOrigins.has(origin) || /^https:\/\/([a-z0-9-]+\.)*pages\.dev$/i.test(origin)) return callback(null, true);
     return callback(new Error("CORS origin not allowed."));
   },
   credentials: true
 }));
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: "draft-8", legacyHeaders: false, message: { message: "محاولات كثيرة. حاول مرة أخرى بعد قليل." } });
 
-function isAdmin(req) {
+async function isAdmin(req) {
   const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
-  return Boolean(adminEmail && req.user?.email && String(req.user.email).toLowerCase() === adminEmail);
+  if (adminEmail && req.user?.email && String(req.user.email).toLowerCase() === adminEmail) return true;
+  if (!req.user?.id) return false;
+  try {
+    const r = await query(`SELECT 1 FROM admins WHERE user_id=$1 AND active=true LIMIT 1`, [req.user.id]);
+    return !!r.rowCount;
+  } catch { return false; }
 }
-function requireAdmin(req, res, next) {
+async function requireAdmin(req, res, next) {
   if (!req.user) return res.status(401).json({ message: "يجب تسجيل الدخول أولاً." });
-  if (!isAdmin(req)) return res.status(403).json({ message: "هذه الصفحة مخصصة لمدير المتجر." });
+  if (!(await isAdmin(req))) return res.status(403).json({ message: "هذه الصفحة مخصصة لمدير المتجر." });
   let csrf = req.cookies?.admin_csrf;
   if (!csrf) {
     csrf = randomUUID();
@@ -182,8 +189,8 @@ async function awardOrderPoints(orderId) {
 app.get("/api/health", async (_req, res) => { try { await query("SELECT 1"); res.json({ ok: true, database: "connected", github: githubConfig().enabled }); } catch { res.status(503).json({ ok: false, database: "unavailable", github: githubConfig().enabled }); } });
 app.get("/api/auth/google", googleStart); app.get("/api/auth/google/callback", googleCallback);
 app.post("/api/auth/register", authLimiter, register); app.post("/api/auth/login", authLimiter, login); app.post("/api/auth/logout", logout); app.get("/api/auth/me", authenticate, me); app.post("/api/auth/forgot-password", authLimiter, forgotPassword); app.post("/api/auth/reset-password", authLimiter, resetPassword);
-app.get("/api/admin/me", authenticate, (req, res) => {
-  if (!isAdmin(req)) return res.status(403).json({ message: "غير مصرح." });
+app.get("/api/admin/me", authenticate, async (req, res) => {
+  if (!(await isAdmin(req))) return res.status(403).json({ message: "غير مصرح." });
   const csrf = req.cookies?.admin_csrf || randomUUID();
   if (!req.cookies?.admin_csrf) res.cookie('admin_csrf', csrf, { httpOnly:true, secure:process.env.NODE_ENV==='production', sameSite:process.env.COOKIE_SAMESITE||'none', path:'/' });
   res.json({ ok:true, csrf, user:req.user });
@@ -252,13 +259,15 @@ async function ensureAdminPlatform(){
   `CREATE TABLE IF NOT EXISTS navigation_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),location VARCHAR(30) NOT NULL DEFAULT 'main',label VARCHAR(120) NOT NULL,href VARCHAR(500) NOT NULL DEFAULT '#',icon VARCHAR(80) NOT NULL DEFAULT '',sort_order INTEGER NOT NULL DEFAULT 0,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
   `CREATE TABLE IF NOT EXISTS backups(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),kind VARCHAR(30) NOT NULL,location TEXT,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
   `CREATE TABLE IF NOT EXISTS admins(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE,role VARCHAR(40) NOT NULL DEFAULT 'admin',permissions JSONB NOT NULL DEFAULT '{}'::jsonb,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS popup_notifications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title VARCHAR(180) NOT NULL,message TEXT NOT NULL DEFAULT '',image_url TEXT NOT NULL DEFAULT '',link_url TEXT NOT NULL DEFAULT '',position VARCHAR(30) NOT NULL DEFAULT 'bottom-right',max_views INTEGER NOT NULL DEFAULT 0,views_count INTEGER NOT NULL DEFAULT 0,page VARCHAR(30) NOT NULL DEFAULT 'all',starts_at TIMESTAMPTZ,ends_at TIMESTAMPTZ,active BOOLEAN NOT NULL DEFAULT TRUE,sort_order INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE TABLE IF NOT EXISTS admin_invites(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),email VARCHAR(255) NOT NULL UNIQUE,role VARCHAR(40) NOT NULL DEFAULT 'admin',active BOOLEAN NOT NULL DEFAULT TRUE,created_by UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
   `CREATE TABLE IF NOT EXISTS wishlist_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID REFERENCES users(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(user_id,product_id))`,
   `ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1`,
   `CREATE TABLE IF NOT EXISTS cart_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID REFERENCES users(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE CASCADE,quantity INTEGER NOT NULL DEFAULT 1,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(user_id,product_id))`,
   `ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1`,
   ];
   for(const sql of statements) await query(sql);
-  const defaults={store_name_ar:'نسمة',store_name_en:'NESMA',store_description:'متجر عبايات نسمة',default_currency:'YER',rate_sar:'70',rate_usd:'540',shipping_fee:'0',free_shipping_min:'0',shipping_duration:'2-5 أيام',whatsapp_number:'',whatsapp_order_message:'مرحباً، أريد تأكيد طلبي رقم {order_id}',seo_title:'نسمة | NESMA STORE',seo_description:'متجر نسمة للعبايات'};
+  const defaults={store_name_ar:'نسمة',store_name_en:'NESMA',store_description:'متجر عبايات نسمة',default_currency:'YER',rate_sar:'70',rate_usd:'540',shipping_fee:'0',free_shipping_min:'0',shipping_duration:'2-5 أيام',whatsapp_number:'',whatsapp_order_message:'مرحباً، أريد تأكيد طلبي رقم {order_id}',seo_title:'نسمة | NESMA STORE',seo_description:'متجر نسمة للعبايات',social_facebook:'',social_instagram:'',social_whatsapp:'',social_tiktok:'',social_x:''};
   for(const [key,value] of Object.entries(defaults)) await query(`INSERT INTO store_settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING`,[key,value]);
   for(const b of [['جديد','#d9b45c','✦'],['الأكثر مبيعاً','#d9b45c','★'],['يباع سريعاً','#b98b35','⚡'],['كمية محدودة','#d77b70','!'],['عرض خاص','#88c77c','%'],['حصري','#d9b45c','◆']]) await query(`INSERT INTO badges(name,color,icon) VALUES($1,$2,$3) ON CONFLICT(name) DO NOTHING`,b);
 }
@@ -283,7 +292,7 @@ app.get('/api/admin/dashboard',authenticate,requireAdmin,async(req,res,next)=>{t
   query(`SELECT COUNT(*)::int wishlist_items FROM wishlist_items`),
   query(`SELECT ${cartExpr} cart_items FROM cart_items`),
   query(`SELECT ${topQty} quantity,${topRevenue} revenue,p.title FROM order_items oi LEFT JOIN products p ON p.id=oi.product_id JOIN orders o ON o.id=oi.order_id WHERE o.status IN('completed','delivered') GROUP BY p.id,p.title ORDER BY quantity DESC LIMIT 8`),
-  query(`SELECT to_char(d,'DD Mon') day,COALESCE(SUM(o.total_yer),0)::numeric total FROM generate_series(CURRENT_DATE-($1::int-1),CURRENT_DATE,'1 day') d LEFT JOIN orders o ON o.created_at::date=d AND o.status NOT IN('cancelled','returned') GROUP BY d ORDER BY d`,[days])
+  query(`SELECT to_char(d,'DD Mon') AS label,COALESCE(SUM(o.total_yer),0)::numeric total FROM generate_series(CURRENT_DATE-($1::int-1),CURRENT_DATE,'1 day') d LEFT JOIN orders o ON o.created_at::date=d AND o.status NOT IN('cancelled','returned') GROUP BY d ORDER BY d`,[days])
  ]);
  const activity=await query(`SELECT action,description,created_at FROM audit_logs ORDER BY created_at DESC LIMIT 12`);
  res.json({stats:{...s.rows[0],...p.rows[0],...c.rows[0],...n.rows[0],...t.rows[0]},statuses:o.rows.map(x=>({label:statusLabelAdmin(x.status),count:x.count})),top_products:w.rows,sales:ci.rows,activity:activity.rows,schema:{order_items_quantity:orderQty,cart_items_quantity:cartQty}});
@@ -321,6 +330,20 @@ app.post('/api/admin/products/:id/restore',authenticate,requireAdmin,async(req,r
 app.get('/api/admin/audit-logs',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 500`);res.json({logs:r.rows})}catch(e){next(e)}});
 app.get('/api/admin/health',authenticate,requireAdmin,async(_req,res,next)=>{try{await query('SELECT 1');const g=githubConfig();const b=await query(`SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1`);res.json({database:'متصل',api:'يعمل',github:g.enabled?'متصل':'غير مربوط',last_backup:b.rows[0]?.created_at?new Date(b.rows[0].created_at).toLocaleString('ar'):'لم يتم بعد',errors:[]})}catch(e){next(e)}});
 app.post('/api/admin/backup',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`INSERT INTO backups(kind,location,created_by) VALUES('database','managed-neon', $1) RETURNING *`,[req.user.id]);await audit(req,'backup.create','backup',r.rows[0].id,'إنشاء سجل نسخة احتياطية');res.json({backup:r.rows[0],message:'تم تسجيل النسخة الاحتياطية. النسخ الفعلية لقاعدة Neon تُدار عبر أدوات Neon/الخادم.'})}catch(e){next(e)}});
+
+app.post('/api/admin/upload-image',authenticate,requireAdmin,async(req,res,next)=>{try{const data=String(req.body.data_url||'');const title=String(req.body.title||'nesma-image');const url=await saveImageToGitHub(data,title);res.status(201).json({url})}catch(e){next(e)}});
+app.get('/api/admin/notifications',authenticate,requireAdmin,async(_req,res,next)=>{try{const r=await query(`SELECT * FROM popup_notifications ORDER BY sort_order ASC,created_at DESC`);res.json({notifications:r.rows})}catch(e){next(e)}});
+app.post('/api/admin/notifications',authenticate,requireAdmin,async(req,res,next)=>{try{const b=req.body||{};const r=await query(`INSERT INTO popup_notifications(title,message,image_url,link_url,position,max_views,page,starts_at,ends_at,active,sort_order) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[String(b.title||'تنبيه نسمة').slice(0,180),String(b.message||''),String(b.image_url||''),String(b.link_url||''),String(b.position||'bottom-right'),Math.max(0,Number(b.max_views||0)),String(b.page||'all'),b.starts_at||null,b.ends_at||null,b.active!==false,Number(b.sort_order||0)]);await audit(req,'notification.create','notification',r.rows[0].id,'إنشاء إشعار منبثق',null,r.rows[0]);res.status(201).json({notification:r.rows[0]})}catch(e){next(e)}});
+app.put('/api/admin/notifications/:id',authenticate,requireAdmin,async(req,res,next)=>{try{const b=req.body||{};const r=await query(`UPDATE popup_notifications SET title=$1,message=$2,image_url=$3,link_url=$4,position=$5,max_views=$6,page=$7,starts_at=$8,ends_at=$9,active=$10,sort_order=$11,updated_at=NOW() WHERE id=$12 RETURNING *`,[String(b.title||'').slice(0,180),String(b.message||''),String(b.image_url||''),String(b.link_url||''),String(b.position||'bottom-right'),Math.max(0,Number(b.max_views||0)),String(b.page||'all'),b.starts_at||null,b.ends_at||null,b.active!==false,Number(b.sort_order||0),req.params.id]);if(!r.rowCount)return res.status(404).json({message:'الإشعار غير موجود.'});res.json({notification:r.rows[0]})}catch(e){next(e)}});
+app.delete('/api/admin/notifications/:id',authenticate,requireAdmin,async(req,res,next)=>{try{await query(`DELETE FROM popup_notifications WHERE id=$1`,[req.params.id]);res.json({ok:true})}catch(e){next(e)}});
+app.get('/api/notifications',async(req,res,next)=>{try{const page=String(req.query.page||'all');const r=await query(`SELECT id,title,message,image_url,link_url,position,page,max_views,views_count FROM popup_notifications WHERE active=true AND (page='all' OR page=$1) AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW()) AND (max_views=0 OR views_count<max_views) ORDER BY sort_order ASC,created_at DESC LIMIT 10`,[page]);for(const n of r.rows) await query(`UPDATE popup_notifications SET views_count=views_count+1,updated_at=NOW() WHERE id=$1 AND (max_views=0 OR views_count<max_views)`,[n.id]);res.json({notifications:r.rows})}catch(e){next(e)}});
+
+app.get('/api/admin/referrals',authenticate,requireAdmin,async(_req,res,next)=>{try{const r=await query(`SELECT u.id,u.name,u.email,u.referral_code,u.points,COUNT(o.id)::int referred_orders,COALESCE(SUM(o.total_yer),0)::numeric referred_sales FROM users u LEFT JOIN orders o ON o.referral_user_id=u.id GROUP BY u.id ORDER BY referred_orders DESC, u.created_at DESC LIMIT 300`);res.json({referrals:r.rows})}catch(e){next(e)}});
+app.put('/api/admin/referrals/:id/points',authenticate,requireAdmin,async(req,res,next)=>{try{const points=Math.trunc(Number(req.body.points||0));const r=await query(`UPDATE users SET points=GREATEST(0,points+$1),updated_at=NOW() WHERE id=$2 RETURNING id,points`,[points,req.params.id]);if(!r.rowCount)return res.status(404).json({message:'العميل غير موجود.'});res.json({user:r.rows[0]})}catch(e){next(e)}});
+
+app.get('/api/admin/admins',authenticate,requireAdmin,async(_req,res,next)=>{try{const r=await query(`SELECT a.id,a.role,a.active,a.created_at,u.id user_id,u.name,u.email FROM admins a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC`);res.json({admins:r.rows})}catch(e){next(e)}});
+app.post('/api/admin/admins',authenticate,requireAdmin,async(req,res,next)=>{try{const email=String(req.body.email||'').trim().toLowerCase();if(!email)return res.status(400).json({message:'أدخل البريد الإلكتروني.'});const u=await query(`SELECT id,name,email FROM users WHERE lower(email)=lower($1) LIMIT 1`,[email]);if(!u.rowCount)return res.status(404).json({message:'يجب أن يكون البريد مسجلاً في المتجر أولاً، ثم أضفه كمدير.'});const r=await query(`INSERT INTO admins(user_id,role,permissions,active) VALUES($1,$2,$3,'true') ON CONFLICT(user_id) DO UPDATE SET active=true,role=EXCLUDED.role RETURNING *`,[u.rows[0].id,String(req.body.role||'admin'),JSON.stringify(req.body.permissions||{})]);await audit(req,'admin.add','admin',r.rows[0].id,'إضافة مدير آخر',null,{email,role:r.rows[0].role});res.status(201).json({admin:{...r.rows[0],name:u.rows[0].name,email:u.rows[0].email}})}catch(e){next(e)}});
+app.put('/api/admin/admins/:id/toggle',authenticate,requireAdmin,async(req,res,next)=>{try{const r=await query(`UPDATE admins SET active=NOT active WHERE id=$1 RETURNING *`,[req.params.id]);res.json({admin:r.rows[0]})}catch(e){next(e)}});
 
 app.get('/api/public/settings',async(_req,res,next)=>{try{const r=await query(`SELECT key,value FROM store_settings`);res.json({settings:Object.fromEntries(r.rows.map(x=>[x.key,x.value]))})}catch(e){next(e)}});
 app.get('/api/public/content/:type',async(req,res,next)=>{try{const r=await query(`SELECT payload,status,publish_at,unpublish_at FROM site_content WHERE key=$1 AND status='published' AND (publish_at IS NULL OR publish_at<=NOW()) AND (unpublish_at IS NULL OR unpublish_at>NOW())`,[req.params.type]);res.json({content:r.rows[0]?.payload||{}})}catch(e){next(e)}});

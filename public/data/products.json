@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-05T07:40:12.992Z",
+  "generated_at": "2026-10-05T07:42:16.524Z",
   "categories": [
     {
       "id": "1eefada9-c7d2-4808-b58f-fd57a28fe0de",
@@ -110,13 +110,17 @@
         "العروض"
       ],
       "audience": "women",
-      "image_url": "/images/products/عباية-شيفون-راقية-1791186003605.webp",
+      "image_url": "/images/products/عباية-شيفون-راقية-1791186129525.webp",
       "images": [
         "/images/products/عباية-شيفون-راقية-1791186006107.webp",
         "/images/products/عباية-شيفون-راقية-1791186007365.webp",
         "/images/products/عباية-شيفون-راقية-1791186008812.webp",
         "/images/products/عباية-شيفون-راقية-1791186010297.webp",
-        "/images/products/عباية-شيفون-راقية-1791186011641.webp"
+        "/images/products/عباية-شيفون-راقية-1791186011641.webp",
+        "/images/products/عباية-شيفون-راقية-1791186131110.webp",
+        "/images/products/عباية-شيفون-راقية-1791186132340.webp",
+        "/images/products/عباية-شيفون-راقية-1791186133888.webp",
+        "/images/products/عباية-شيفون-راقية-1791186135243.webp"
       ],
       "sizes": [
         "52",
@@ -144,7 +148,7 @@
       "selected": true,
       "sort_order": 0,
       "created_at": "2026-10-01T16:27:55.307Z",
-      "updated_at": "2026-10-05T07:40:12.967Z"
+      "updated_at": "2026-10-05T07:42:16.501Z"
     }
   ]
 }

@@ -130,6 +130,12 @@ img {
 .nav-right .modern-logo {
     transform: translateX(-30px);
 }
+  .site-logo {
+    height: 40px;          /* تحديد حجم/ارتفاع الشعار */
+    width: auto;           /* الحفاظ على تناسب أبعاد الشعار */
+    margin-right: auto;    /* دفع الشعار (أو العناصر التي قبله) لأقصى اليمين حسب تخطيط Flexbox */
+}
+
 .blogo {
   display: flex;
   align-items: center;

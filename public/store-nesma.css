@@ -2838,3 +2838,22 @@ input:focus, select:focus, textarea:focus { border-color:#d9b45c !important; box
 .mpsizes button.selected {
   color: #080808;
 }
+.mtit,
+.mcat,
+.mprice {
+    background: linear-gradient(
+        135deg,
+        #fff4b8 0%,
+        #e2c15c 20%,
+        #b88a24 45%,
+        #7b5710 65%,
+        #d8b34f 82%,
+        #4a3105 100%
+    );
+
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+
+    font-weight: 700;
+}

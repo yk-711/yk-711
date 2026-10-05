@@ -2857,3 +2857,8 @@ input:focus, select:focus, textarea:focus { border-color:#d9b45c !important; box
 
     font-weight: 700;
 }
+/* تفاصيل المنتج في مختاراتنا */
+.mdesc {
+  color: #000000 !important;
+  -webkit-text-fill-color: #000000 !important;
+}

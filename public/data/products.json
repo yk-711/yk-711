@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-10-05T08:28:03.911Z",
+  "generated_at": "2026-10-05T08:28:11.129Z",
   "categories": [
     {
       "id": "1eefada9-c7d2-4808-b58f-fd57a28fe0de",
@@ -90,11 +90,11 @@
       "badges": [
         "أناقة عصرية"
       ],
-      "active": true,
+      "active": false,
       "selected": false,
       "sort_order": 0,
       "created_at": "2026-10-05T08:28:03.836Z",
-      "updated_at": "2026-10-05T08:28:03.836Z"
+      "updated_at": "2026-10-05T08:28:11.118Z"
     },
     {
       "id": "44c1e1e3-c26e-4a63-86c8-171d179e96f2",

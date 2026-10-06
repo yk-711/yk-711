@@ -2838,27 +2838,17 @@ input:focus, select:focus, textarea:focus { border-color:#d9b45c !important; box
 .mpsizes button.selected {
   color: #080808;
 }
-.mtit,
-.mcat,
-.mprice {
-    background: linear-gradient(
-        135deg,
-        #fff4b8 0%,
-        #e2c15c 20%,
-        #b88a24 45%,
-        #7b5710 65%,
-        #d8b34f 82%,
-        #4a3105 100%
-    );
 
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-
-    font-weight: 700;
-}
-/* تفاصيل المنتج في مختاراتنا */
-.mdesc {
-  color: #000000 !important;
-  -webkit-text-fill-color: #000000 !important;
-}
+/* Search suggestions + trending searches: kept visible in the NESMA search experience */
+.sovsuggest{margin-top:24px;text-align:right}
+.sovsuggest>p,.sovtrend>p{color:rgba(255,255,255,.5);font-size:.82rem;margin:0 0 10px;font-weight:700}
+.sovsuggest-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.sovsuggest-item{display:flex;align-items:center;gap:9px;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.1);border-radius:13px;background:rgba(255,255,255,.045);color:#f5f1e8;text-align:right;cursor:pointer;font:inherit;transition:.22s ease}
+.sovsuggest-item:hover{border-color:rgba(212,175,55,.55);background:rgba(212,175,55,.1);transform:translateY(-1px)}
+.sovsuggest-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#d4af37;box-shadow:0 0 10px rgba(212,175,55,.35)}
+.sov-empty{display:block;color:rgba(255,255,255,.35);font-size:.78rem;text-align:center;padding:10px}
+.sovtrend{margin-top:22px}
+.sovtrend-list{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.sovtrend .ttag{margin:0!important;border-color:rgba(212,175,55,.28)!important;color:#e4c873!important;background:rgba(212,175,55,.08)!important}
+.sovtrend .ttag:hover{background:#d4af37!important;color:#111!important}
+@media(max-width:600px){.sovsuggest-list{grid-template-columns:1fr}.sovbox{max-height:calc(100vh - 100px);overflow-y:auto;padding-bottom:25px}.sovsuggest{margin-top:18px}.sovtrend{margin-top:18px}}

@@ -11,7 +11,10 @@
   box-shadow: none !important;
 }
 </style>
-</head><body dir="rtl">
+<style id="nesma-luxury-selected-style">
+#sutoolSelectedSection .section-heading h2,.shop-head h1{background:linear-gradient(110deg,#8f6b2a 0%,#d7b35b 35%,#f4df9b 52%,#a87d2f 72%,#6e4d18 100%);-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 24px rgba(212,175,55,.12);font-weight:800;}
+#sutoolSelectedSection .shop-kicker{color:#b88d3a;letter-spacing:.24em;}
+</style></head><body dir="rtl">
 
 <nav class="navbar nesma-modern-navbar" id="nav" aria-label="القائمة الرئيسية">
   <div class="nav-left">
@@ -67,41 +70,17 @@
 <button><i class="fas fa-search"></i></button>
 </div>
 
-<div id="searchStatus" class="search-status">اكتبي اسم المنتج أو الفئة للبحث السريع</div><div class="sovcats">
-<div class="sovcat active" data-cat="all">
-<img alt="" src="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900"/>كل المنتجات
-               </div>
-<div class="sovcat" data-cat="burgers">
-<img alt="" src="https://nesma-store.pages.dev/images/products/%D9%8A%D8%AF%D8%A7%D8%AA-%D9%85%D8%B3%D9%8A%D9%85-1791085426486.webp"/>للمناسبات
-               </div>
-<div class="sovcat" data-cat="pizza">
-<img alt="" src="https://images.pexels.com/photos/13791266/pexels-photo-13791266.jpeg?auto=compress&cs=tinysrgb&w=900"/>مطرزات
-               </div>
-<div class="sovcat" data-cat="chicken">
-<img alt="" src="https://images.pexels.com/photos/13862203/pexels-photo-13862203.jpeg?auto=compress&cs=tinysrgb&w=900"/>رسيمة
-               </div>
-<div class="sovcat" data-cat="wraps">
-<img alt="" src="https://nesma-store.pages.dev/images/products/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A9-%D8%B4%D9%8A%D9%81%D9%88%D9%86-%D8%B1%D8%A7%D9%82%D9%8A%D8%A9-1790872063031.jpg"/>شيفون مبطن
-               </div>
-<div class="sovcat" data-cat="pasta">
-<img alt="" src="https://images.pexels.com/photos/33537065/pexels-photo-33537065.jpeg?auto=compress&cs=tinysrgb&w=900"/>نص كلوش
-               </div>
-<div class="sovcat" data-cat="desserts">
-<img alt="" src="https://images.pexels.com/photos/37558001/pexels-photo-37558001.jpeg?auto=compress&cs=tinysrgb&w=900"/>عروض خاصة
-               </div>
+<div class="sovcats" aria-label="أقسام المتجر"></div>
+<div class="sovsuggest" aria-label="اقتراحات البحث">
+  <p>اقتراحات</p>
+  <div id="searchSuggestions" class="sovsuggest-list"></div>
 </div>
-<div class="sovtrend">
-<p><i class="fas fa-fire me-1" style="color:var(--secondary);"></i>عمليات البحث الرائجة</p>
-<span class="ttag">عباية مطرز</span>
-<span class="ttag">كلوش كامل</span>
-<span class="ttag">شبابي</span>
-<span class="ttag">نص فراشة</span>
-<span class="ttag"> امام سحاب</span>
-<span class="ttag">قماش تيك توك</span>
+<div class="sovtrend" aria-label="البحث الرائج">
+  <p>البحث الرائج</p>
+  <div id="searchTrending" class="sovtrend-list"></div>
 </div>
 </div>
 </div>
-
 
 <!-- NESMA IMAGE SLIDER -->
 <link rel="stylesheet" href="slider-addon/slider-addon.css">
@@ -121,7 +100,7 @@
 <link rel="stylesheet" href="shop.css">
 <section class="shop-wrap" id="sutoolSelectedSection" dir="rtl">
   <div class="section-heading">
-    <div><span class="shop-kicker">NESMA PICKS</span><h2>منتجات مختارة</h2></div>
+    <div><span class="shop-kicker">NESMA PICKS</span><h2>مختارات متجرنا</h2></div>
     <a href="products-page.html">عرض الكل ←</a>
   </div>
   <div class="selected-slider">
@@ -1974,230 +1953,18 @@ document.addEventListener(
       <h3 id="nesma-home-category-title">أحدث صيحات العبايات والبراقع الراقية</h3>
       <span></span>
     </div>
-    <div class="nesma-home-category-scroller">
-      <a class="nesma-home-category-card" href="categories.html">
-        <img src="https://aosan.co/storage/category/2024-04-28-662e912bcc7d7.webp" alt="خمارات وبراقع" loading="lazy">
-        <div class="nesma-home-category-card__footer"><span>خمارات وبراقع</span><span>←</span></div>
-      </a>
-      <a class="nesma-home-category-card" href="categories.html">
-        <img src="https://aosan.co/storage/category/2024-04-30-66313e9fb8d92.webp" alt="عبايات مطرز" loading="lazy">
-        <div class="nesma-home-category-card__footer"><span>عبايات مطرز</span><span>←</span></div>
-      </a>
-      <a class="nesma-home-category-card" href="categories.html">
-        <img src="https://aosan.co/storage/category/2024-04-30-66313efc3a3bc.webp" alt="عبايات سادة" loading="lazy">
-        <div class="nesma-home-category-card__footer"><span>عبايات سادة</span><span>←</span></div>
-      </a>
-      <a class="nesma-home-category-card" href="categories.html">
-        <img src="https://aosan.co/storage/category/2024-08-03-66ae5a796a65e.webp" alt="عبايات ملونة" loading="lazy">
-        <div class="nesma-home-category-card__footer"><span>عبايات ملونة</span><span>←</span></div>
-      </a>
-    </div>
+    <div class="nesma-home-category-scroller" id="nesmaHomeCategories"></div>
   </section>
 </section>
 
 
-<section id="category" style="display:none !important;">
-<div class="container">
-<div class="text-center mb-5" data-aos="fade-up">
-<span class="slbl">ما نقدمه</span>
-<h2 class="stitle">تصفحي حسب <span>الفئة</span></h2>
-<div class="sline"></div>
-<p class="sdesc mx-auto" style="max-width:480px;">من القطع اليومية إلى التفاصيل الراقية، اختاري ما يرافق يومك.</p>
-</div>
-<div class="row g-3 justify-content-center">
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="0">
-<div class="catcard active" data-filter="all">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">كل المنتجات</div>
-<div class="catct">99 items</div>
-</div>
-</div>
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="70">
-<div class="catcard" data-filter="burgers">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/13791266/pexels-photo-13791266.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">للسيدات</div>
-<div class="catct">24 items</div>
-</div>
-</div>
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="140">
-<div class="catcard" data-filter="pizza">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/13862203/pexels-photo-13862203.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">للأطفال</div>
-<div class="catct">18 items</div>
-</div>
-</div>
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="210">
-<div class="catcard" data-filter="chicken">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/13838837/pexels-photo-13838837.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">Fried فساتين</div>
-<div class="catct">15 items</div>
-</div>
-</div>
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="280">
-<div class="catcard" data-filter="wraps">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/33537065/pexels-photo-33537065.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">أطقم</div>
-<div class="catct">12 items</div>
-</div>
-</div>
-<div class="col-6 col-sm-4 col-md-3 col-lg-2" data-aos="zoom-in" data-aos-delay="350">
-<div class="catcard" data-filter="desserts">
-<img alt="" class="catimg" src="https://images.pexels.com/photos/37558001/pexels-photo-37558001.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="catnm">عروض خاصة</div>
-<div class="catct">20 items</div>
-</div>
-</div>
-</div>
-</div>
-</section>
 
 
 
-<section id="menu">
-<div class="container">
-<div class="text-center mb-5" data-aos="fade-up">
-<span class="slbl">مختاراتنا</span>
-<h2 class="stitle">Our مختارات <span>المتجر</span></h2>
-<div class="sline"></div>
-</div><div class="row g-4" id="mgrid">
 
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-c="burgers">
-<div class="mcard" data-cal="620" data-cat="للسيدات" data-audience="women" data-desc="عباية يومية بقصة عملية وخامة مريحة، بتفاصيل هادئة تناسب إطلالتك اليومية." data-img="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="349 ر.س" data-price="289 ر.س" data-rating="4.9" data-reviews="128" data-tags="Spicy,Bestseller,Beef" data-time="12" data-title="Classic عباية يومية">
-<div class="mimg">
-<img alt="عباية يومية" src="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mbdg hot"><i class="fas fa-star"></i> Hot</div>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">للسيدات</div>
-<div class="mtit">Classic عباية يومية</div>
-<div class="mdesc">Double smashed patty, cheddar, caramelized onions, pickles &amp; special sauce</div>
-<div class="mfoot">
-<div>
-<div class="mprice">289 ر.س <small>349 ر.س</small></div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(128)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
 
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-aos-delay="80" data-c="pizza">
-<div class="mcard" data-cal="480" data-cat="للأطفال" data-audience="kids" data-desc="فستان ناعم بقصة لطيفة وتفاصيل مريحة لأيام الصغيرات." data-img="https://images.pexels.com/photos/13791266/pexels-photo-13791266.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="279 ر.س" data-price="219 ر.س" data-rating="4.8" data-reviews="95" data-tags="Vegetarian,جديد,Italian" data-time="18" data-title="فستان غيمة للصغيرات">
-<div class="mimg">
-<img alt="للأطفال" src="https://images.pexels.com/photos/13791266/pexels-photo-13791266.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mbdg new"><i class="fas fa-star"></i> جديد</div>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">للأطفال</div>
-<div class="mtit">فستان غيمة للصغيرات</div>
-<div class="mdesc">San Marzano tomatoes, buffalo mozzarella, basil &amp; truffle oil on sourdough</div>
-<div class="mfoot">
-<div>
-<div class="mprice">219 ر.س <small>279 ر.س</small></div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(95)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
 
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-aos-delay="160" data-c="chicken">
-<div class="mcard" data-cal="710" data-cat="فساتين" data-audience="women" data-desc="طقم خفيف من خامة كتانية يناسب اللعب والمشاوير." data-img="https://images.pexels.com/photos/13862203/pexels-photo-13862203.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="129 ر.س" data-price="159 ر.س" data-rating="5.0" data-reviews="210" data-tags="Spicy,Bestseller,Crispy" data-time="15" data-title="Nashville Hot فساتين">
-<div class="mimg">
-<img alt="فساتين" src="https://images.pexels.com/photos/13862203/pexels-photo-13862203.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mbdg"><i class="fas fa-star"></i> الأكثر طلباً</div>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">فساتين</div>
-<div class="mtit">Nashville Hot فساتين</div>
-<div class="mdesc">طقم خفيف من خامة كتانية يناسب اللعب والمشاوير</div>
-<div class="mfoot">
-<div>
-<div class="mprice">159 ر.س <small>129 ر.س</small></div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(210)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
-
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-c="wraps">
-<div class="mcard" data-cal="520" data-cat="أطقم" data-audience="women" data-desc="وشاح ناعم بلون الطين يضيف هدوءاً وأناقة لإطلالتك." data-img="https://images.pexels.com/photos/13838837/pexels-photo-13838837.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="" data-price="89 ر.س" data-rating="4.5" data-reviews="74" data-tags="Grilled,Fresh,Mexican" data-time="10" data-title="وشاح ناعم بلون الطين">
-<div class="mimg">
-<img alt="Wrap" src="https://images.pexels.com/photos/13838837/pexels-photo-13838837.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">أطقم</div>
-<div class="mtit">وشاح ناعم بلون الطين</div>
-<div class="mdesc">Grilled chicken, peppers, sour cream &amp; guacamole in a warm tortilla</div>
-<div class="mfoot">
-<div>
-<div class="mprice">89 ر.س</div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(74)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
-
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-aos-delay="80" data-c="desserts">
-<div class="mcard" data-cal="390" data-cat="عروض خاصة" data-audience="kids" data-desc="طقم يومي ناعم للصغيرات، مريح للحركة واللعب." data-img="https://images.pexels.com/photos/33537065/pexels-photo-33537065.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="169 ر.س" data-price="129 ر.س" data-rating="4.9" data-reviews="56" data-tags="Sweet,جديد,Chocolate" data-time="8" data-title="Nutella إكسسارات شعر">
-<div class="mimg">
-<img alt="إكسسارات شعر" src="https://images.pexels.com/photos/33537065/pexels-photo-33537065.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mbdg new"><i class="fas fa-star"></i> جديد</div>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">عروض خاصة</div>
-<div class="mtit">Nutella إكسسارات شعر</div>
-<div class="mdesc">Molten chocolate cake with Nutella center, vanilla ice cream &amp; caramel</div>
-<div class="mfoot">
-<div>
-<div class="mprice">129 ر.س <small>169 ر.س</small></div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(56)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
-
-<div class="col-sm-6 col-lg-4 mwrap" data-aos="fade-up" data-aos-delay="160" data-c="pasta">
-<div class="mcard" data-cal="560" data-cat="إكسسوارات" data-audience="women" data-desc="حقيبة قماش عملية تحمل الأشياء الصغيرة بأناقة." data-img="https://images.pexels.com/photos/37558001/pexels-photo-37558001.jpeg?auto=compress&cs=tinysrgb&w=900" data-old="" data-price="129 ر.س" data-rating="4.9" data-reviews="88" data-tags="Vegetarian,اختيار نسمة,Italian" data-time="20" data-title="Truffle Mushroom إكسسوارات">
-<div class="mimg">
-<img alt="إكسسوارات" src="https://images.pexels.com/photos/37558001/pexels-photo-37558001.jpeg?auto=compress&cs=tinysrgb&w=900"/>
-<div class="mbdg hot">اختيار نسمة</div>
-<div class="mhrt"><i class="far fa-heart"></i></div>
-</div>
-<div class="mbody">
-<div class="mcat">إكسسوارات</div>
-<div class="mtit">Truffle Mushroom إكسسوارات</div>
-<div class="mdesc">Al dente tagliatelle, wild mushrooms, black truffle, parmesan &amp; thyme</div>
-<div class="mfoot">
-<div>
-<div class="mprice">129 ر.س</div>
-<div class="mstars"><i class="fas fa-star"></i> <span style="color:#bbb;font-size:.7rem;">(88)</span></div>
-</div>
-<button class="madd" title="View Details"><i class="fas fa-plus"></i></button>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<div class="text-center mt-5"><a class="btn-red" href="#"><i class="fas fa-th-large"></i>View Full المتجر</a></div>
-</div>
-</section>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script><script src="products.js"></script><script src="store-nesma.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script><script src="store-nesma.js"></script>
 <!-- القائمة السفلية الجديدة -->
 <nav class="bottom-navigation" dir="rtl" aria-label="القائمة الرئيسية">
   <a href="#hero" class="nav-item active" aria-current="page">
@@ -2663,15 +2430,15 @@ body { padding-bottom:calc(var(--nav-height) + 25px); }
 
     <!-- الروابط -->
     <div class="that-links">
-        <a href="#">من نحن</a>
-        <a href="#">سياسة الخصوصية</a>
-        <a href="#">الشروط والأحكام</a>
-        <a href="#">تواصل معنا</a>
+        <a href="about.html">من نحن</a>
+        <a href="privacy.html">سياسة الخصوصية</a>
+        <a href="terms.html">الشروط والأحكام</a>
+        <a href="contact.html">تواصل معنا</a>
     </div>
 
     <!-- التواصل -->
   <div class="that-social">
-        <a href=""><i class="fab fa-facebook-f"></i></a>
+        <a href="#"><i class="fab fa-facebook-f"></i></a>
 <a href="#"><i class="fab fa-instagram"></i></a>
 <a href="#"><i class="fab fa-whatsapp"></i></a>
 <a href="#"><i class="fab fa-tiktok"></i></a>

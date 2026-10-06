@@ -24,6 +24,7 @@
 .nesma-modern-navbar .currency-hidden { display:none; }
 .nesma-modern-navbar .nav-right { gap:9px; direction:ltr; }
 .nesma-modern-navbar .modern-logo { display:flex; align-items:center; color:#fff; white-space:nowrap; text-decoration:none; }
+.nesma-modern-navbar .site-logo { width:104px; height:52px; object-fit:contain; display:block; border-radius:10px; }
 .nesma-modern-navbar .logo-text { font-family:'Dancing Script',cursive; font-size:48px; font-weight:700; line-height:.9; }
 .nesma-modern-navbar .modern-menu-button { margin-left:2px; font-size:22px; width:30px; height:48px; }
 .nesma-modern-navbar .modern-nav-collapse { width:100%; }
@@ -64,7 +65,7 @@ body.product-page{margin:0;min-width:0}
     <select id="currencySelect" class="currency-hidden" aria-label="اختيار العملة"><option value="sar">ريال سعودي</option><option value="yer">ريال يمني</option><option value="usd">دولار أمريكي</option></select>
   </div>
   <div class="nav-right">
-    <a class="modern-logo" href="./" aria-label="متجر نسمة"><span class="logo-text">Lhat</span></a>
+    <a class="modern-logo" href="./" aria-label="متجر نسمة"><img src="slider-addon/images/banner7.jpg" class="site-logo" alt="نسمة | NESMA"></a>
     <button class="navbar-toggler modern-menu-button" id="modernMenuButton" data-bs-target="#navmenu" type="button" aria-label="فتح القائمة" aria-expanded="false"><i class="fas fa-ellipsis-v" aria-hidden="true"></i></button>
   </div>
   <div class="collapse navbar-collapse modern-nav-collapse" id="navmenu">
@@ -81,7 +82,7 @@ body.product-page{margin:0;min-width:0}
   </div>
 </nav>
 <div class="nav-backdrop" id="navBackdrop" aria-hidden="true"></div>
-<div id="searchOv" aria-hidden="true"><button class="sovclose" id="searchClose" type="button" aria-label="إغلاق البحث"><i class="fas fa-times"></i></button><div class="sovbox"><h4>ما الذي تبحثين عنه اليوم؟</h4><div class="sovinput"><input autocomplete="off" id="searchInput" placeholder="ابحثي عن عباية أو فئة..." type="text"><button type="button" onclick="location.href='products-page.html'"><i class="fas fa-search"></i></button></div><div id="searchStatus" class="search-status">اكتبي اسم المنتج أو الفئة للبحث السريع</div></div></div>
+<div id="searchOv" aria-hidden="true"><button class="sovclose" id="searchClose" type="button" aria-label="إغلاق البحث"><i class="fas fa-times"></i></button><div class="sovbox"><h4>ما الذي تبحثين عنه اليوم؟</h4><div class="sovinput"><input autocomplete="off" id="searchInput" placeholder="ابحثي عن عباية أو فئة..." type="text"><button type="button" onclick="location.href='products-page.html'"><i class="fas fa-search"></i></button></div><div id="searchStatus" class="search-status">اكتبي اسم المنتج أو الفئة للبحث السريع</div><div class="sovsuggest" aria-label="اقتراحات البحث"><p>اقتراحات</p><div id="searchSuggestions" class="sovsuggest-list"></div></div><div class="sovtrend" aria-label="البحث الرائج"><p>البحث الرائج</p><div id="searchTrending" class="sovtrend-list"></div></div></div></div>
 <main class="shop-wrap product-shell"><div id="productRoot" class="loading">جاري تحميل تفاصيل المنتج…</div></main>
 <div id="toast" class="toast">تمت إضافة المنتج إلى السلة</div>
 <script src="shop.js"></script>

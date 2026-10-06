@@ -26,7 +26,8 @@
       const socialMap={facebook:settings.social_facebook,instagram:settings.social_instagram,whatsapp:settings.social_whatsapp,tiktok:settings.social_tiktok,x:settings.social_x};
       document.querySelectorAll('.that-social a').forEach(a=>{const cls=[...a.classList].join(' ')+' '+[...(a.querySelector('i')?.classList||[])].join(' ');const key=cls.includes('facebook')?'facebook':cls.includes('instagram')?'instagram':cls.includes('whatsapp')?'whatsapp':cls.includes('tiktok')?'tiktok':cls.includes('twitter')||cls.includes('x-twitter')?'x':null;if(key){const href=socialMap[key]||'';a.href=href||'#';a.style.display=href?'inline-flex':'none';a.target=href?'_blank':'_self';a.rel=href?'noopener noreferrer':'';}});
       const trendTitle=document.querySelector('#nesma-home-category-title'); if(trendTitle&&content.latest_trends_title)trendTitle.textContent=content.latest_trends_title;
-      const trendWrap=document.querySelector('.nesma-home-category-scroller'); const trends=Array.isArray(content.latest_trends)?content.latest_trends:[]; if(trendWrap&&trends.length){trendWrap.innerHTML=trends.filter(x=>x.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(x=>`<a class="nesma-home-category-card" href="${String(x.link||'categories.html').replace(/"/g,'&quot;')}"><img src="${String(x.image||'').replace(/"/g,'&quot;')}" alt="${String(x.title||'').replace(/"/g,'&quot;')}" loading="lazy"><div class="nesma-home-category-card__footer"><span>${String(x.title||'')}</span><span>←</span></div></a>`).join('');}
+      const trendWrap=document.querySelector('.nesma-home-category-scroller'); const trends=Array.isArray(content.latest_trends)?content.latest_trends:[]; if(trendWrap){if(trends.length){trendWrap.innerHTML=trends.filter(x=>x.active!==false).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(x=>`<a class="nesma-home-category-card" href="${String(x.link||'categories.html').replace(/"/g,'&quot;')}"><img src="${String(x.image||'').replace(/"/g,'&quot;')}" alt="${String(x.title||'').replace(/"/g,'&quot;')}" loading="lazy"><div class="nesma-home-category-card__footer"><span>${String(x.title||'')}</span><span>←</span></div></a>`).join('');}else{try{const cr=await fetch(`${API}/api/categories`).then(r=>r.ok?r.json():{categories:[]});const cats=cr.categories||[];trendWrap.innerHTML=cats.slice(0,8).map(x=>`<a class="nesma-home-category-card" href="products-page.html?category=${encodeURIComponent(x.slug)}"><div class="nesma-home-category-card__footer"><span>${String(x.name||'قسم')}</span><span>←</span></div></a>`).join('')||'<div class="empty">أضيفي الأقسام من لوحة الإدارة.</div>';}catch{}}}
+      const sovcats=document.querySelector('.sovcats');if(sovcats){try{const cr=await fetch(`${API}/api/categories`).then(r=>r.ok?r.json():{categories:[]});const cats=cr.categories||[];sovcats.innerHTML=`<button type="button" class="sovcat active" data-cat="all">كل المنتجات</button>`+cats.map(x=>`<button type="button" class="sovcat" data-cat="${String(x.slug).replace(/"/g,'&quot;')}">${String(x.name).replace(/</g,'&lt;')}</button>`).join('');sovcats.querySelectorAll('[data-cat]').forEach(b=>b.addEventListener('click',()=>{const next=new URL('products-page.html',location.href);if(b.dataset.cat&&b.dataset.cat!=='all')next.searchParams.set('category',b.dataset.cat);location.href=next.toString()}));}catch{}}
       const custom=Array.isArray(content.custom_sliders)?content.custom_sliders:[]; if(custom.length){let host=document.getElementById('nesmaCustomSliders');if(!host){host=document.createElement('div');host.id='nesmaCustomSliders';document.querySelector('#sutoolSelectedSection')?.insertAdjacentElement('afterend',host);}try{const pr=await fetch(`${API}/api/products`).then(r=>r.ok?r.json():{products:[]});const products=pr.products||[];host.innerHTML=custom.sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map((sl,i)=>{const ids=sl.product_ids||[];const ps=ids.length?ids.map(id=>products.find(p=>String(p.id)===String(id))).filter(Boolean):products.slice(0,12);return `<section class="shop-wrap nesma-custom-slider"><div class="section-heading"><div><span class="shop-kicker">NESMA COLLECTION</span><h2>${String(sl.title||'تشكيلة مختارة')}</h2></div><a href="products-page.html">عرض الكل ←</a></div><div class="selected-slider"><div class="selected-track">${ps.map(p=>`<article class="mwrap"><div class="mcard" data-id="${p.id}" data-title="${String(p.title||'').replace(/"/g,'&quot;')}" data-price="${p.price||0}"><img src="${p.image_url||''}" alt=""><div class="mmeta"><b>${String(p.title||'')}</b><span>${Number(p.price||0).toLocaleString('en-US')} ر.ي</span></div></div></article>`).join('')}</div></div></section>`}).join('');}catch{}}
 
       const catTitle=document.querySelector('.nesma-home-category-showcase__hero h2'); if(catTitle&&content.category_showcase_title)catTitle.textContent=content.category_showcase_title;
@@ -77,7 +78,42 @@
 
   function setMobileNav(open){ if(!navMenu||!navToggle||!navBackdrop)return; const next=window.innerWidth<992&&open; navMenu.classList.toggle('show',next);navMenu.classList.toggle('mobile-open',next);navBackdrop.classList.toggle('show',next);navBackdrop.setAttribute('aria-hidden',String(!next));navToggle.setAttribute('aria-expanded',String(next));document.body.classList.toggle('nav-locked',next); }
   navToggle?.setAttribute('aria-expanded','false'); navToggle?.addEventListener('click',e=>{e.preventDefault();setMobileNav(!navMenu?.classList.contains('mobile-open'));}); navBackdrop?.addEventListener('click',()=>setMobileNav(false)); navMenu?.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>setMobileNav(false))); window.addEventListener('resize',()=>{if(window.innerWidth>=992)setMobileNav(false);});
-  search?.addEventListener('click',()=>{setMobileNav(false);overlay?.classList.add('open');}); closeSearch?.addEventListener('click',()=>overlay?.classList.remove('open'));
+  const overlaySearchInput=document.getElementById('searchInput');
+  const searchButton=overlaySearchInput?.closest('.sovinput')?.querySelector('button');
+  const searchSuggestions=document.getElementById('searchSuggestions');
+  const searchTrending=document.getElementById('searchTrending');
+  let searchCatalog=[];
+  let searchCatalogLoaded=false;
+  const escapeSearchHtml=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+  const goSearch=term=>{const q=String(term !== undefined ? term : (overlaySearchInput?.value || '')).trim();if(overlaySearchInput&&term!==undefined)overlaySearchInput.value=q;const next=new URL('products-page.html',location.href);if(q)next.searchParams.set('q',q);location.href=next.toString();};
+  const renderSearchSuggestions=()=>{
+    if(!searchSuggestions)return;
+    const q=String(overlaySearchInput?.value||'').trim().toLocaleLowerCase('ar');
+    if(!searchCatalog.length){searchSuggestions.innerHTML='<span class=\"sov-empty\">ابدئي بكتابة اسم العباية أو أي كلمة من تفاصيلها</span>';return;}
+    let items=searchCatalog.filter(p=>{const hay=[p.title,p.description,p.category,p.tags,p.colors,p.fabrics,p.sizes].filter(Boolean).join(' ').toLocaleLowerCase('ar');return !q||hay.includes(q);}).slice(0,6);
+    if(!q)items=searchCatalog.slice(0,6);
+    searchSuggestions.innerHTML=items.length?items.map(p=>`<button type=\"button\" class=\"sovsuggest-item\" data-search-term=\"${escapeSearchHtml(p.title||'')}\"><span class=\"sovsuggest-dot\"></span><span>${escapeSearchHtml(p.title||'منتج')}</span></button>`).join(''):'<span class=\"sov-empty\">لا توجد اقتراحات مطابقة</span>';
+    searchSuggestions.querySelectorAll('[data-search-term]').forEach(b=>b.addEventListener('click',()=>goSearch(b.dataset.searchTerm)));
+  };
+  const renderTrending=()=>{
+    if(!searchTrending)return;
+    const fallback=['عبايات','عباية سوداء','عبايات مطرزة','وصل حديثاً','الأكثر مبيعاً','العروض'];
+    const terms=[];
+    searchCatalog.slice(0,30).forEach(p=>{[p.category,p.tags].filter(Boolean).forEach(v=>String(v).split(/[,،|]/).map(x=>x.trim()).filter(x=>x.length>2&&x.length<35).forEach(x=>{if(!terms.includes(x))terms.push(x);}));});
+    const list=[...terms,...fallback].filter((x,i,a)=>a.indexOf(x)===i).slice(0,8);
+    searchTrending.innerHTML=list.map(x=>`<button type=\"button\" class=\"ttag\" data-search-term=\"${escapeSearchHtml(x)}\">${escapeSearchHtml(x)}</button>`).join('');
+    searchTrending.querySelectorAll('[data-search-term]').forEach(b=>b.addEventListener('click',()=>goSearch(b.dataset.searchTerm)));
+  };
+  const loadSearchCatalog=async()=>{
+    if(searchCatalogLoaded)return; searchCatalogLoaded=true;
+    try{const r=await fetch(`${API}/api/products`);const d=r.ok?await r.json():{};searchCatalog=Array.isArray(d.products)?d.products:[];}catch{searchCatalog=[];}
+    renderSearchSuggestions();renderTrending();
+  };
+  search?.addEventListener('click',()=>{setMobileNav(false);overlay?.classList.add('open');loadSearchCatalog();renderSearchSuggestions();setTimeout(()=>document.getElementById('searchInput')?.focus(),80);});
+  closeSearch?.addEventListener('click',()=>overlay?.classList.remove('open'));
+  overlaySearchInput?.addEventListener('input',renderSearchSuggestions);
+  searchButton?.addEventListener('click',()=>goSearch());
+  overlaySearchInput?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();goSearch()}});
 
   // النقر على بطاقة المنتج يفتح صفحة التفاصيل الاحترافية، وليس نافذة منبثقة.
   function bindProductCards(){ document.querySelectorAll('.mcard').forEach(card=>{

@@ -17,6 +17,7 @@
 .nesma-modern-navbar .currency-hidden { display:none; }
 .nesma-modern-navbar .nav-right { gap:9px; direction:ltr; }
 .nesma-modern-navbar .modern-logo { display:flex; align-items:center; color:#fff; white-space:nowrap; text-decoration:none; }
+.nesma-modern-navbar .site-logo { width:104px; height:52px; object-fit:contain; display:block; border-radius:10px; }
 .nesma-modern-navbar .logo-text { font-family:'Dancing Script',cursive; font-size:48px; font-weight:700; line-height:.9; }
 .nesma-modern-navbar .logo-pin { width:48px; height:auto; margin:12px 0 0 -4px; overflow:visible; }
 .nesma-modern-navbar .modern-menu-button { margin-left:2px; font-size:22px; width:30px; height:48px; }
@@ -38,6 +39,7 @@ body { padding-bottom:calc(var(--nav-height) + 25px); }
   .nesma-modern-navbar #currencyShort { font-size:14px; }
   .nesma-modern-navbar .nav-right { gap:6px; }
   .nesma-modern-navbar .logo-text { font-size:40px; }
+  .nesma-modern-navbar .site-logo { width:92px; height:46px; }
   .nesma-modern-navbar .logo-pin { width:39px; margin-left:-3px; margin-top:9px; }
   .nesma-modern-navbar .modern-menu-button { height:40px; }
   .nesma-modern-navbar .modern-nav-collapse { margin-top:10px; }
@@ -49,6 +51,7 @@ body { padding-bottom:calc(var(--nav-height) + 25px); }
   .nesma-modern-navbar .currency-icon { font-size:16px; }
   .nesma-modern-navbar #currencyShort { font-size:12px; }
   .nesma-modern-navbar .logo-text { font-size:35px; }
+  .nesma-modern-navbar .site-logo { width:82px; height:42px; }
   .nesma-modern-navbar .logo-pin { width:34px; }
   .bottom-navigation { right:8px; left:8px; bottom:6px; height:58px; padding:3px 4px; border-radius:20px; }
   .bottom-navigation .nav-item { height:50px; }
@@ -90,7 +93,7 @@ body { padding-bottom:calc(var(--nav-height) + 25px); }
 
   <div class="nav-right">
     <a class="modern-logo" href="./" aria-label="متجر نسمة">
-      <span class="logo-text">Lhat</span>
+      <img src="slider-addon/images/banner7.jpg" class="site-logo" alt="نسمة | NESMA">
     </a>
 
     <button class="navbar-toggler modern-menu-button" id="modernMenuButton" data-bs-target="#navmenu" type="button" aria-label="فتح القائمة" aria-expanded="false">
@@ -119,37 +122,14 @@ body { padding-bottom:calc(var(--nav-height) + 25px); }
 <button><i class="fas fa-search"></i></button>
 </div>
 
-<div id="searchStatus" class="search-status">اكتبي اسم المنتج أو الفئة للبحث السريع</div><div class="sovcats">
-<div class="sovcat active" data-cat="all">
-<img alt="" src="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900"/>كل المنتجات
-               </div>
-<div class="sovcat" data-cat="burgers">
-<img alt="" src="https://images.pexels.com/photos/13791262/pexels-photo-13791262.jpeg?auto=compress&cs=tinysrgb&w=900"/>للسيدات
-               </div>
-<div class="sovcat" data-cat="pizza">
-<img alt="" src="https://images.pexels.com/photos/13791266/pexels-photo-13791266.jpeg?auto=compress&cs=tinysrgb&w=900"/>للأطفال
-               </div>
-<div class="sovcat" data-cat="chicken">
-<img alt="" src="https://images.pexels.com/photos/13862203/pexels-photo-13862203.jpeg?auto=compress&cs=tinysrgb&w=900"/>فساتين
-               </div>
-<div class="sovcat" data-cat="wraps">
-<img alt="" src="https://images.pexels.com/photos/13838837/pexels-photo-13838837.jpeg?auto=compress&cs=tinysrgb&w=900"/>أطقم
-               </div>
-<div class="sovcat" data-cat="pasta">
-<img alt="" src="https://images.pexels.com/photos/33537065/pexels-photo-33537065.jpeg?auto=compress&cs=tinysrgb&w=900"/>إكسسوارات
-               </div>
-<div class="sovcat" data-cat="desserts">
-<img alt="" src="https://images.pexels.com/photos/37558001/pexels-photo-37558001.jpeg?auto=compress&cs=tinysrgb&w=900"/>عروض خاصة
-               </div>
+<div class="sovcats" aria-label="أقسام المتجر"></div>
+<div class="sovsuggest" aria-label="اقتراحات البحث">
+  <p>اقتراحات</p>
+  <div id="searchSuggestions" class="sovsuggest-list"></div>
 </div>
-<div class="sovtrend">
-<p><i class="fas fa-fire me-1" style="color:var(--secondary);"></i>عمليات البحث الرائجة</p>
-<span class="ttag">عباية يومية</span>
-<span class="ttag">Nashville فساتين</span>
-<span class="ttag">Truffle للأطفال</span>
-<span class="ttag">إكسسارات شعر</span>
-<span class="ttag">عروض نسمة</span>
-<span class="ttag">هدايا الصغار</span>
+<div class="sovtrend" aria-label="البحث الرائج">
+  <p>البحث الرائج</p>
+  <div id="searchTrending" class="sovtrend-list"></div>
 </div>
 </div>
 </div><header class="shop-head shop-wrap"><span class="shop-kicker">YOUR BAG</span><h1>سلة المشتريات</h1><p><span id="cartCountPage">0</span> قطعة في السلة</p></header><main class="shop-wrap"><div class="cart-layout"><section class="cart-list" id="cartList"></section><aside class="cart-summary"><div class="summary-total"><span>الإجمالي</span><strong id="cartTotal">0 ر.ي</strong></div><button class="checkout" onclick="location.href='checkout.html'">إتمام الطلب عبر واتساب</button></aside></div></main><script src="shop.js"></script><script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script><script src="store-nesma.js"></script><script src="notifications.js"></script></body></html>

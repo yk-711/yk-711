@@ -5,7 +5,7 @@
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const money=(n,c=currentCurrency)=>{const cur=CURRENCIES[c]||CURRENCIES.YER;return `${(Number(n||0)*cur.rate).toLocaleString('en-US',{minimumFractionDigits:cur.decimals,maximumFractionDigits:cur.decimals})} ${cur.label}`};
   function setCurrency(c){const key=String(c||'YER').toUpperCase();if(!CURRENCIES[key])return;currentCurrency=key;localStorage.setItem('nesma-currency',key);renderCart();updateRenderedPrices();}
-  async function load(){const [p,c]=await Promise.all([fetch('https://nesma-store.onrender.com/api/products',{credentials:'include'}).then(r=>r.json()),fetch('https://nesma-store.onrender.com/api/categories',{credentials:'include'}).then(r=>r.json())]);state.products=p.products||[];state.categories=c.categories||[];captureReferral();document.dispatchEvent(new CustomEvent('nesma:data-ready',{detail:state}));}
+  async function load(){const [p,c]=await Promise.all([fetch('/api/products',{credentials:'include'}).then(r=>r.json()),fetch('/api/categories',{credentials:'include'}).then(r=>r.json())]);state.products=p.products||[];state.categories=c.categories||[];captureReferral();document.dispatchEvent(new CustomEvent('nesma:data-ready',{detail:state}));}
   function captureReferral(){const ref=new URLSearchParams(location.search).get('ref');if(ref&&/^NESMA-[A-Z0-9]+$/i.test(ref))localStorage.setItem('nesma-referral-code',ref.toUpperCase());}
   function saveWish(){localStorage.setItem('nesma-wishlist',JSON.stringify([...state.wish]));}
   function saveCart(){localStorage.setItem('nesma-cart',JSON.stringify(state.cart));}

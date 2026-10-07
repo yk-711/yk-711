@@ -1,5 +1,5 @@
 (() => {
-  const API = 'https://nesma-store.onrender.com';
+  const API = '';
   const accountBtn = document.getElementById('accountBtn');
   const currencySelect = document.getElementById('currencySelect');
   const currencyToggle = document.getElementById('currencyToggle');

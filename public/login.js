@@ -1,4 +1,4 @@
-const API_BASE = "https://nesma-store.onrender.com"; // الـAPI يعمل من نفس نطاق الموقع على Render
+const API_BASE = ""; // الـAPI يعمل من نفس نطاق الموقع على Render
 
 const loginBox = document.getElementById("loginBox");
 const registerBox = document.getElementById("registerBox");
@@ -109,7 +109,7 @@ registerForm.addEventListener("submit", async event => {
   try {
     const data = await api("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name, email, password })
+      body: JSON.stringify({ name, email, password, referral_code: getReferralCode() })
     });
 
     showMessage("registerMessage", data.message || "تم إنشاء الحساب بنجاح", "success");
@@ -142,8 +142,16 @@ async function forgotPassword() {
 
 document.getElementById("forgotButton").addEventListener("click", forgotPassword);
 
+function getReferralCode() {
+  const fromUrl = new URLSearchParams(window.location.search).get("ref");
+  const stored = localStorage.getItem("nesma-referral-code");
+  const value = (fromUrl || stored || "").trim().toUpperCase();
+  return /^NESMA-[A-Z0-9]+$/.test(value) ? value : "";
+}
+
 function startGoogleAuth() {
-  window.location.href = `${API_BASE}/api/auth/google`;
+  const ref = getReferralCode();
+  window.location.href = `${API_BASE}/api/auth/google${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`;
 }
 
 const googleButton = document.getElementById("googleLoginButton");

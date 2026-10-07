@@ -220,7 +220,24 @@ async function awardOrderPoints(orderId) {
 }
 
 app.get("/api/health", async (_req, res) => { try { await query("SELECT 1"); res.json({ ok: true, database: "connected", github: githubConfig().enabled }); } catch { res.status(503).json({ ok: false, database: "unavailable", github: githubConfig().enabled }); } });
-app.get("/api/auth/google", googleStart); app.get("/api/auth/google/callback", googleCallback);
+app.get("/api/auth/google", googleStart);
+app.get("/api/auth/google/callback", googleCallback);
+app.get("/api/auth/bridge", async (req,res,next)=>{
+  try {
+    const token=String(req.query.token||"");
+    const payload=(await import("jsonwebtoken")).default.verify(token,process.env.JWT_SECRET);
+    if(payload.type!=="oauth_bridge"||!payload.sub) return res.status(401).send("جلسة Google غير صالحة.");
+    const r=await query(`SELECT id,name,email,provider,email_verified,created_at,referral_code,points FROM users WHERE id=$1 LIMIT 1`,[payload.sub]);
+    if(!r.rowCount) return res.status(401).send("الحساب غير موجود.");
+    const remember=true;
+    const authToken=(await import("jsonwebtoken")).default.sign({sub:r.rows[0].id,type:"session"},process.env.JWT_SECRET,{expiresIn:"30d"});
+    res.cookie("auth_token",authToken,{httpOnly:true,secure:process.env.COOKIE_SECURE?process.env.COOKIE_SECURE==='true':process.env.NODE_ENV==='production',sameSite:process.env.COOKIE_SAMESITE||'none',maxAge:30*24*60*60*1000,path:"/"});
+    const configured=String(process.env.FRONTEND_URL||"").trim().replace(/\/$/,"");
+    const frontend=configured||"https://nesma-store.pages.dev";
+    const target=String(req.query.target||"account.html")==="admin.html"&&String(r.rows[0].email||"").toLowerCase()===String(process.env.ADMIN_EMAIL||"").trim().toLowerCase()?"admin.html":"account.html";
+    return res.redirect(`${frontend}/${target}`);
+  } catch(e){ next(e); }
+});
 app.post("/api/auth/register", authLimiter, register); app.post("/api/auth/login", authLimiter, login); app.post("/api/auth/logout", logout); app.get("/api/auth/me", authenticate, me); app.post("/api/auth/forgot-password", authLimiter, forgotPassword); app.post("/api/auth/reset-password", authLimiter, resetPassword);
 app.get("/api/admin/me", authenticate, async (req, res) => {
   if (!(await isAdmin(req))) return res.status(403).json({ message: "غير مصرح." });
@@ -401,13 +418,13 @@ async function ensureProductTable(){
   await query(`CREATE TABLE IF NOT EXISTS categories(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),name VARCHAR(100) NOT NULL,slug VARCHAR(120) UNIQUE NOT NULL,image_url TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,sort_order INTEGER NOT NULL DEFAULT 0,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   const count=await query(`SELECT COUNT(*)::int AS count FROM categories`); if(!count.rows[0].count){for(const [i,name] of ["عبايات","وصل حديثاً","الأكثر مبيعاً","العروض","إكسسوارات","أطقم"].entries()) await query(`INSERT INTO categories(name,slug,sort_order) VALUES($1,$2,$3) ON CONFLICT(slug) DO NOTHING`,[name,name,i]);}
   await query(`CREATE INDEX IF NOT EXISTS products_active_idx ON products(active,sort_order,created_at DESC)`);
-  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`); await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0`); await query(`CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`); await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0`); await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL`); await query(`CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL`);
   await query(`CREATE TABLE IF NOT EXISTS orders(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID REFERENCES users(id) ON DELETE SET NULL,status VARCHAR(30) NOT NULL DEFAULT 'pending',customer_name VARCHAR(150) NOT NULL,phone VARCHAR(50) NOT NULL,city VARCHAR(100) NOT NULL DEFAULT '',address TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',currency VARCHAR(3) NOT NULL DEFAULT 'YER',total_yer NUMERIC(14,2) NOT NULL DEFAULT 0,referral_code VARCHAR(32),referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32)`);
   await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL`);
   await query(`CREATE TABLE IF NOT EXISTS order_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE SET NULL,name VARCHAR(200) NOT NULL,image_url TEXT NOT NULL DEFAULT '',price_yer NUMERIC(12,2) NOT NULL DEFAULT 0,quantity INTEGER NOT NULL DEFAULT 1,size VARCHAR(100) NOT NULL DEFAULT '',color VARCHAR(100) NOT NULL DEFAULT '',fabric VARCHAR(100) NOT NULL DEFAULT '')`);
   await query(`CREATE TABLE IF NOT EXISTS points_ledger(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,points INTEGER NOT NULL,reason VARCHAR(100) NOT NULL,order_id UUID REFERENCES orders(id) ON DELETE SET NULL,referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
-  await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id,order_id,reason) WHERE order_id IS NOT NULL`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id,order_id,reason) WHERE order_id IS NOT NULL`); await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_signup_referral_idx ON points_ledger(user_id,reason) WHERE reason='referral_signup'`);
   await query(`CREATE TABLE IF NOT EXISTS notifications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title VARCHAR(200) NOT NULL,message TEXT NOT NULL DEFAULT '',type VARCHAR(30) NOT NULL DEFAULT 'info',active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await query(`UPDATE users SET referral_code='NESMA-'||UPPER(SUBSTRING(REPLACE(id::text,'-',''),1,6)) WHERE referral_code IS NULL`);
   await ensureAdminPlatform();

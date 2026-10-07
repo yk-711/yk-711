@@ -27,8 +27,39 @@ function makeReferralCode() {
   return `NESMA-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
+function normalizeReferralCode(value) {
+  const code = String(value || "").trim().toUpperCase();
+  return /^NESMA-[A-Z0-9]+$/.test(code) ? code : "";
+}
+
+function referralSignupPoints() {
+  const n = Math.trunc(Number(process.env.REFERRAL_SIGNUP_POINTS || 100));
+  return Number.isFinite(n) && n > 0 ? n : 100;
+}
+
+async function awardReferralSignup(referralCode, newUserId) {
+  const code = normalizeReferralCode(referralCode);
+  if (!code || !newUserId) return { awarded: 0, referrerId: null };
+  const ref = await query(`SELECT id FROM users WHERE referral_code=$1 AND id<>$2 LIMIT 1`, [code, newUserId]);
+  if (!ref.rowCount) return { awarded: 0, referrerId: null };
+  const referrerId = ref.rows[0].id;
+  const points = referralSignupPoints();
+  const ledger = await query(
+    `INSERT INTO points_ledger(user_id,points,reason,order_id,referral_user_id)
+     VALUES($1,$2,'referral_signup',NULL,$3)
+     ON CONFLICT DO NOTHING RETURNING id`,
+    [referrerId, points, newUserId]
+  );
+  if (ledger.rowCount) {
+    await query(`UPDATE users SET points=points+$1,updated_at=NOW() WHERE id=$2`, [points, referrerId]);
+    return { awarded: points, referrerId };
+  }
+  return { awarded: 0, referrerId };
+}
+
 export async function register(req, res) {
   const { name, email, password } = req.body;
+  const referralCode = normalizeReferralCode(req.body?.referral_code);
   const cleanName = String(name || "").trim();
   const cleanEmail = normalizeEmail(email);
 
@@ -52,20 +83,27 @@ export async function register(req, res) {
   }
 
   const passwordHash = await bcrypt.hash(password, PASSWORD_ROUNDS);
+  let referredByUserId = null;
+  if (referralCode) {
+    const ref = await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`, [referralCode]);
+    if (ref.rowCount) referredByUserId = ref.rows[0].id;
+  }
   let result;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       result = await query(
-        `INSERT INTO users (name, email, password_hash, provider, referral_code)
-         VALUES ($1, $2, $3, 'local', $4)
+        `INSERT INTO users (name, email, password_hash, provider, referral_code, referred_by_user_id)
+         VALUES ($1, $2, $3, 'local', $4, $5)
          RETURNING id, name, email, provider, email_verified, created_at, referral_code, points`,
-        [cleanName, cleanEmail, passwordHash, makeReferralCode()]
+        [cleanName, cleanEmail, passwordHash, makeReferralCode(), referredByUserId]
       );
       break;
     } catch (e) {
       if (e.code !== '23505' || !String(e.detail || e.message).includes('referral')) throw e;
     }
   }
+  const newUser = result.rows[0];
+  if (referredByUserId) await awardReferralSignup(referralCode, newUser.id);
 
   return res.status(201).json({
     message: "تم إنشاء الحساب بنجاح.",
@@ -283,6 +321,10 @@ function sessionCookie(res, user, remember = true) {
   });
 }
 
+function makeOAuthBridgeToken(user) {
+  return jwt.sign({ sub: user.id, type: "oauth_bridge" }, process.env.JWT_SECRET, { expiresIn: "2m" });
+}
+
 function frontendUrl(req) {
   const configured = String(process.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
   if (configured) return configured;
@@ -314,6 +356,7 @@ export function googleStart(req, res) {
   }
 
   const state = randomBytes(32).toString("hex");
+  const referralCode = normalizeReferralCode(req.query?.ref);
   res.cookie("google_oauth_state", state, {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
@@ -321,6 +364,15 @@ export function googleStart(req, res) {
     maxAge: 10 * 60 * 1000,
     path: "/"
   });
+  if (referralCode) {
+    res.cookie("google_referral_code", referralCode, {
+      httpOnly: true,
+      secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
+      sameSite: process.env.COOKIE_SAMESITE || "none",
+      maxAge: 10 * 60 * 1000,
+      path: "/"
+    });
+  }
 
   const url = client.generateAuthUrl({
     access_type: "online",
@@ -334,9 +386,16 @@ export function googleStart(req, res) {
 export async function googleCallback(req, res) {
   const client = googleClient();
   const stateCookie = req.cookies.google_oauth_state;
+  const referralCode = normalizeReferralCode(req.cookies.google_referral_code);
   const { code, state, error } = req.query;
 
   res.clearCookie("google_oauth_state", {
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
+    sameSite: process.env.COOKIE_SAMESITE || "none",
+    path: "/"
+  });
+  res.clearCookie("google_referral_code", {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
@@ -388,18 +447,22 @@ export async function googleCallback(req, res) {
       user.email_verified = emailVerified;
     } else {
       const created = await query(
-        `INSERT INTO users (name,email,password_hash,provider,provider_id,email_verified,referral_code)
-         VALUES ($1,$2,NULL,'google',$3,$4,$5)
+        `INSERT INTO users (name,email,password_hash,provider,provider_id,email_verified,referral_code,referred_by_user_id)
+         VALUES ($1,$2,NULL,'google',$3,$4,$5,$6)
          RETURNING id,name,email,password_hash,provider,provider_id,email_verified,created_at,referral_code,points`,
-        [name, email, googleId, emailVerified, makeReferralCode()]
+        [name, email, googleId, emailVerified, makeReferralCode(), referralCode ? (await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`, [referralCode])).rows[0]?.id || null : null]
       );
       user = created.rows[0];
+      if (referralCode) await awardReferralSignup(referralCode, user.id);
     }
 
-    // Create the session before redirecting so /account.html can immediately
-    // verify the authenticated user.
+    // The frontend is hosted on Cloudflare Pages while the API is on Render.
+    // A direct Render cookie is cross-site from pages.dev, so bridge the OAuth
+    // session through the same-origin /api proxy before opening account.html.
     sessionCookie(res, user, true);
-    return res.redirect(isAdminUser(user) ? adminRedirectUrl(req) : accountRedirectUrl(req));
+    const bridgeToken = makeOAuthBridgeToken(user);
+    const target = isAdminUser(user) ? "admin.html" : "account.html";
+    return res.redirect(`${frontendUrl(req)}/api/auth/bridge?token=${encodeURIComponent(bridgeToken)}&target=${target}`);
   } catch (error) {
     console.error("Google OAuth error:", error);
     return res.redirect(loginRedirectUrl(req, "google_failed"));

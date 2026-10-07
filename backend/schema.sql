@@ -57,6 +57,7 @@ CREATE INDEX IF NOT EXISTS products_active_idx ON products(active, sort_order, c
 -- Safe extensions for orders, referrals, points and notifications.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(32);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS points INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL;
 
@@ -126,6 +127,7 @@ CREATE TABLE IF NOT EXISTS points_ledger (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id, order_id, reason) WHERE order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_signup_referral_idx ON points_ledger(user_id, reason) WHERE reason = 'referral_signup';
 CREATE INDEX IF NOT EXISTS points_ledger_user_idx ON points_ledger(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS notifications (

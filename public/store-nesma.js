@@ -1,5 +1,5 @@
 (() => {
-  const API = '';
+  const API = 'https://nesma-store.onrender.com';
   const accountBtn = document.getElementById('accountBtn');
   const currencySelect = document.getElementById('currencySelect');
   const currencyToggle = document.getElementById('currencyToggle');
@@ -43,7 +43,7 @@
 
   accountBtn?.addEventListener('click', async e => {
     e.preventDefault();
-    try { const r = await fetch(`${API}/api/auth/me`, {credentials:'include'}); location.href = r.ok ? 'account.html' : 'login.html'; }
+    try { const r = await fetch(`${API}/api/auth/me`, {credentials:'include',headers:{...(localStorage.getItem('nesma-auth-token')?{Authorization:'Bearer '+localStorage.getItem('nesma-auth-token')}: {})}}); location.href = r.ok ? 'account.html' : 'login.html'; }
     catch { location.href = 'login.html'; }
   });
   cartFab?.addEventListener('click', () => { location.href = 'cart.html'; });

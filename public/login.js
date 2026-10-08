@@ -1,10 +1,31 @@
-const API_BASE = ""; // الـAPI يعمل من نفس نطاق الموقع على Render
+const API_BASE = "https://nesma-store.onrender.com"; // الـAPI يعمل من نفس نطاق الموقع على Render
 
 const loginBox = document.getElementById("loginBox");
 const registerBox = document.getElementById("registerBox");
 
 const loginForm = document.getElementById("loginForm");
 const registerForm = document.getElementById("registerForm");
+
+function getAuthToken(){ return localStorage.getItem("nesma-auth-token") || ""; }
+function setAuthToken(token){ if(token) localStorage.setItem("nesma-auth-token", token); }
+
+async function consumeGoogleToken(){
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const token = hash.get("oauth_token");
+  if(!token) return;
+  history.replaceState(null, document.title, window.location.pathname + window.location.search);
+  try {
+    const r = await fetch(`${API_BASE}/api/auth/google/exchange`, {method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({token})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.message || "تعذر إكمال تسجيل الدخول عبر Google.");
+    setAuthToken(d.token);
+    window.location.href = d.redirect === "/admin.html" ? "admin.html" : "account.html";
+  } catch(e) { showMessage("loginMessage", e.message, "error"); }
+}
+consumeGoogleToken();
+
+const referralFromUrl = new URLSearchParams(window.location.search).get("ref");
+if (referralFromUrl && /^NESMA-[A-Z0-9]+$/i.test(referralFromUrl)) localStorage.setItem("nesma-referral-code", referralFromUrl.toUpperCase());
 
 function showRegister() {
   clearMessages();
@@ -35,6 +56,7 @@ async function api(path, options = {}) {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(getAuthToken() ? {Authorization:`Bearer ${getAuthToken()}`} : {}),
       ...(options.headers || {})
     },
     ...options
@@ -64,6 +86,7 @@ loginForm.addEventListener("submit", async event => {
       })
     });
 
+    setAuthToken(data.token);
     showMessage("loginMessage", data.message || "تم تسجيل الدخول بنجاح", "success");
 
     // عدّل المسار حسب موقع الصفحة الرئيسية في مشروعك.
@@ -109,7 +132,7 @@ registerForm.addEventListener("submit", async event => {
   try {
     const data = await api("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ name, email, password, referral_code: getReferralCode() })
+      body: JSON.stringify({ name, email, password, referral_code: localStorage.getItem("nesma-referral-code") || "" })
     });
 
     showMessage("registerMessage", data.message || "تم إنشاء الحساب بنجاح", "success");
@@ -142,15 +165,8 @@ async function forgotPassword() {
 
 document.getElementById("forgotButton").addEventListener("click", forgotPassword);
 
-function getReferralCode() {
-  const fromUrl = new URLSearchParams(window.location.search).get("ref");
-  const stored = localStorage.getItem("nesma-referral-code");
-  const value = (fromUrl || stored || "").trim().toUpperCase();
-  return /^NESMA-[A-Z0-9]+$/.test(value) ? value : "";
-}
-
 function startGoogleAuth() {
-  const ref = getReferralCode();
+  const ref = localStorage.getItem("nesma-referral-code") || "";
   window.location.href = `${API_BASE}/api/auth/google${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`;
 }
 

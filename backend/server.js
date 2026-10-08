@@ -2,13 +2,14 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
+import jwt from "jsonwebtoken";
 import path from "path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "url";
 import "dotenv/config";
 
 import { query } from "./db.js";
-import { register, login, logout, me, forgotPassword, resetPassword, authenticate, googleStart, googleCallback } from "./auth.js";
+import { register, login, logout, me, forgotPassword, resetPassword, authenticate, googleStart, googleCallback, googleExchange } from "./auth.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,7 +55,7 @@ async function requireAdmin(req, res, next) {
     csrf = randomUUID();
     res.cookie('admin_csrf', csrf, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.COOKIE_SAMESITE || 'none', path: '/' });
   }
-  if (['POST','PUT','PATCH','DELETE'].includes(req.method) && req.path !== '/me') {
+  if (['POST','PUT','PATCH','DELETE'].includes(req.method) && req.path !== '/me' && !String(req.headers.authorization || '').startsWith('Bearer ')) {
     if (!req.headers['x-csrf-token'] || req.headers['x-csrf-token'] !== csrf) return res.status(403).json({ message: 'رمز الحماية غير صالح. حدّث لوحة الإدارة وحاول مجددًا.' });
   }
   res.on('finish', () => {
@@ -220,24 +221,7 @@ async function awardOrderPoints(orderId) {
 }
 
 app.get("/api/health", async (_req, res) => { try { await query("SELECT 1"); res.json({ ok: true, database: "connected", github: githubConfig().enabled }); } catch { res.status(503).json({ ok: false, database: "unavailable", github: githubConfig().enabled }); } });
-app.get("/api/auth/google", googleStart);
-app.get("/api/auth/google/callback", googleCallback);
-app.get("/api/auth/bridge", async (req,res,next)=>{
-  try {
-    const token=String(req.query.token||"");
-    const payload=(await import("jsonwebtoken")).default.verify(token,process.env.JWT_SECRET);
-    if(payload.type!=="oauth_bridge"||!payload.sub) return res.status(401).send("جلسة Google غير صالحة.");
-    const r=await query(`SELECT id,name,email,provider,email_verified,created_at,referral_code,points FROM users WHERE id=$1 LIMIT 1`,[payload.sub]);
-    if(!r.rowCount) return res.status(401).send("الحساب غير موجود.");
-    const remember=true;
-    const authToken=(await import("jsonwebtoken")).default.sign({sub:r.rows[0].id,type:"session"},process.env.JWT_SECRET,{expiresIn:"30d"});
-    res.cookie("auth_token",authToken,{httpOnly:true,secure:process.env.COOKIE_SECURE?process.env.COOKIE_SECURE==='true':process.env.NODE_ENV==='production',sameSite:process.env.COOKIE_SAMESITE||'none',maxAge:30*24*60*60*1000,path:"/"});
-    const configured=String(process.env.FRONTEND_URL||"").trim().replace(/\/$/,"");
-    const frontend=configured||"https://nesma-store.pages.dev";
-    const target=String(req.query.target||"account.html")==="admin.html"&&String(r.rows[0].email||"").toLowerCase()===String(process.env.ADMIN_EMAIL||"").trim().toLowerCase()?"admin.html":"account.html";
-    return res.redirect(`${frontend}/${target}`);
-  } catch(e){ next(e); }
-});
+app.get("/api/auth/google", googleStart); app.get("/api/auth/google/callback", googleCallback); app.post("/api/auth/google/exchange", authLimiter, googleExchange);
 app.post("/api/auth/register", authLimiter, register); app.post("/api/auth/login", authLimiter, login); app.post("/api/auth/logout", logout); app.get("/api/auth/me", authenticate, me); app.post("/api/auth/forgot-password", authLimiter, forgotPassword); app.post("/api/auth/reset-password", authLimiter, resetPassword);
 app.get("/api/admin/me", authenticate, async (req, res) => {
   if (!(await isAdmin(req))) return res.status(403).json({ message: "غير مصرح." });
@@ -250,7 +234,9 @@ app.get("/api/products", async (_req, res, next) => { try { const r = await quer
 app.get("/api/categories", async (_req, res, next) => { try { const r = await query(`SELECT * FROM categories WHERE active=true ORDER BY sort_order ASC,name ASC`); res.json({ categories: r.rows }); } catch (e) { next(e); } });
 app.get("/api/notifications", async (_req,res,next)=>{try{const r=await query(`SELECT id,title,message,type,created_at FROM notifications WHERE active=true ORDER BY created_at DESC LIMIT 10`);res.json({notifications:r.rows});}catch(e){next(e)}});
 app.get("/api/account/summary", authenticate, async (req,res,next)=>{try{const u=await query(`SELECT id,name,email,provider,email_verified,created_at,referral_code,points FROM users WHERE id=$1`,[req.user.id]);const orders=await query(`SELECT o.id,o.status,o.total_yer,o.currency,o.created_at,COALESCE(json_agg(json_build_object('name',i.name,'quantity',i.quantity,'size',i.size,'color',i.color,'fabric',i.fabric)) FILTER (WHERE i.id IS NOT NULL),'[]') items FROM orders o LEFT JOIN order_items i ON i.order_id=o.id WHERE o.user_id=$1 GROUP BY o.id ORDER BY o.created_at DESC`,[req.user.id]);const code=u.rows[0]?.referral_code||'';res.json({user:u.rows[0],referralLink:`https://nesma-store.pages.dev/?ref=${encodeURIComponent(code)}`,orders:orders.rows});}catch(e){next(e)}});
-app.post("/api/orders", async (req,res,next)=>{try{const items=parseCartItems(req.body.items);for(const x of items){if(!x.product_id)throw new Error('بيانات المنتج غير صالحة.');const pr=await query(`SELECT id,title,image_url,price FROM products WHERE id=$1 AND active=true LIMIT 1`,[x.product_id]);if(!pr.rowCount)throw new Error('أحد المنتجات لم يعد متاحاً.');x.price_yer=Number(pr.rows[0].price);x.name=pr.rows[0].title;x.image_url=pr.rows[0].image_url||x.image_url;}const total=items.reduce((sum,x)=>sum+x.price_yer*x.quantity,0);if(!total)return res.status(400).json({message:'إجمالي الطلب غير صالح.'});const referralCode=String(req.body.referral_code||'').trim().toUpperCase()||null;let referralUserId=null;if(referralCode){const rr=await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`,[referralCode]);if(rr.rowCount)referralUserId=rr.rows[0].id;}let userId=null;try{if(req.headers.cookie){/* JWT remains httpOnly; authenticate middleware is intentionally not required for guest checkout. */}}catch{}
+app.post("/api/orders", async (req,res,next)=>{try{const items=parseCartItems(req.body.items);for(const x of items){if(!x.product_id)throw new Error('بيانات المنتج غير صالحة.');const pr=await query(`SELECT id,title,image_url,price FROM products WHERE id=$1 AND active=true LIMIT 1`,[x.product_id]);if(!pr.rowCount)throw new Error('أحد المنتجات لم يعد متاحاً.');x.price_yer=Number(pr.rows[0].price);x.name=pr.rows[0].title;x.image_url=pr.rows[0].image_url||x.image_url;}const total=items.reduce((sum,x)=>sum+x.price_yer*x.quantity,0);if(!total)return res.status(400).json({message:'إجمالي الطلب غير صالح.'});let referralCode=String(req.body.referral_code||'').trim().toUpperCase()||null;let referralUserId=null;if(referralCode){const rr=await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`,[referralCode]);if(rr.rowCount)referralUserId=rr.rows[0].id;}let userId=null;
+try { const authHeader=String(req.headers.authorization||''); const authToken=authHeader.startsWith('Bearer ')?authHeader.slice(7).trim():(req.cookies?.auth_token||''); if(authToken){ const {sub}=jwt.verify(authToken, process.env.JWT_SECRET); userId=sub; } } catch {}
+if (!referralUserId && userId) { const ru=await query(`SELECT referred_by_user_id FROM users WHERE id=$1 LIMIT 1`,[userId]); referralUserId=ru.rows[0]?.referred_by_user_id||null; if(referralUserId){ const rc=await query(`SELECT referral_code FROM users WHERE id=$1`,[referralUserId]); referralCode=rc.rows[0]?.referral_code||referralCode; } }try{if(req.headers.cookie){/* JWT remains httpOnly; authenticate middleware is intentionally not required for guest checkout. */}}catch{}
 const authToken=req.cookies?.auth_token; if(authToken){try{const jwt=(await import('jsonwebtoken')).default;const payload=jwt.verify(authToken,process.env.JWT_SECRET);userId=payload.sub||null;}catch{}}
 const o=await query(`INSERT INTO orders(user_id,status,customer_name,phone,city,address,notes,currency,total_yer,referral_code,referral_user_id) VALUES($1,'pending',$2,$3,$4,$5,$6,'YER',$7,$8,$9) RETURNING id,status,total_yer,created_at`,[userId,String(req.body.name||'').trim().slice(0,150),String(req.body.phone||'').trim().slice(0,50),String(req.body.city||'').trim().slice(0,100),String(req.body.address||'').trim(),String(req.body.notes||'').trim(),total,referralCode,referralUserId]);
 if(!o.rows[0].id)throw new Error('تعذر إنشاء الطلب.');for(const x of items) await query(`INSERT INTO order_items(order_id,product_id,name,image_url,price_yer,quantity,size,color,fabric) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,[o.rows[0].id,x.product_id,x.name,x.image_url,x.price_yer,x.quantity,x.size,x.color,x.fabric]);res.status(201).json({order:o.rows[0],message:'تم حفظ الطلب بنجاح.'});}catch(e){next(e)}});
@@ -424,7 +410,7 @@ async function ensureProductTable(){
   await query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL`);
   await query(`CREATE TABLE IF NOT EXISTS order_items(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,product_id UUID REFERENCES products(id) ON DELETE SET NULL,name VARCHAR(200) NOT NULL,image_url TEXT NOT NULL DEFAULT '',price_yer NUMERIC(12,2) NOT NULL DEFAULT 0,quantity INTEGER NOT NULL DEFAULT 1,size VARCHAR(100) NOT NULL DEFAULT '',color VARCHAR(100) NOT NULL DEFAULT '',fabric VARCHAR(100) NOT NULL DEFAULT '')`);
   await query(`CREATE TABLE IF NOT EXISTS points_ledger(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,points INTEGER NOT NULL,reason VARCHAR(100) NOT NULL,order_id UUID REFERENCES orders(id) ON DELETE SET NULL,referral_user_id UUID REFERENCES users(id) ON DELETE SET NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
-  await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id,order_id,reason) WHERE order_id IS NOT NULL`); await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_signup_referral_idx ON points_ledger(user_id,reason) WHERE reason='referral_signup'`);
+  await query(`CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id,order_id,reason) WHERE order_id IS NOT NULL`);
   await query(`CREATE TABLE IF NOT EXISTS notifications(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),title VARCHAR(200) NOT NULL,message TEXT NOT NULL DEFAULT '',type VARCHAR(30) NOT NULL DEFAULT 'info',active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
   await query(`UPDATE users SET referral_code='NESMA-'||UPPER(SUBSTRING(REPLACE(id::text,'-',''),1,6)) WHERE referral_code IS NULL`);
   await ensureAdminPlatform();

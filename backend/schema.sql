@@ -127,7 +127,6 @@ CREATE TABLE IF NOT EXISTS points_ledger (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_order_reason_idx ON points_ledger(user_id, order_id, reason) WHERE order_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS points_ledger_signup_referral_idx ON points_ledger(user_id, reason) WHERE reason = 'referral_signup';
 CREATE INDEX IF NOT EXISTS points_ledger_user_idx ON points_ledger(user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS notifications (

@@ -5,6 +5,7 @@ import { query } from "./db.js";
 import { OAuth2Client } from "google-auth-library";
 
 const PASSWORD_ROUNDS = 12;
+const REFERRAL_SIGNUP_POINTS = Math.max(0, Math.trunc(Number(process.env.REFERRAL_SIGNUP_POINTS || 10)));
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -27,39 +28,9 @@ function makeReferralCode() {
   return `NESMA-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
-function normalizeReferralCode(value) {
-  const code = String(value || "").trim().toUpperCase();
-  return /^NESMA-[A-Z0-9]+$/.test(code) ? code : "";
-}
-
-function referralSignupPoints() {
-  const n = Math.trunc(Number(process.env.REFERRAL_SIGNUP_POINTS || 100));
-  return Number.isFinite(n) && n > 0 ? n : 100;
-}
-
-async function awardReferralSignup(referralCode, newUserId) {
-  const code = normalizeReferralCode(referralCode);
-  if (!code || !newUserId) return { awarded: 0, referrerId: null };
-  const ref = await query(`SELECT id FROM users WHERE referral_code=$1 AND id<>$2 LIMIT 1`, [code, newUserId]);
-  if (!ref.rowCount) return { awarded: 0, referrerId: null };
-  const referrerId = ref.rows[0].id;
-  const points = referralSignupPoints();
-  const ledger = await query(
-    `INSERT INTO points_ledger(user_id,points,reason,order_id,referral_user_id)
-     VALUES($1,$2,'referral_signup',NULL,$3)
-     ON CONFLICT DO NOTHING RETURNING id`,
-    [referrerId, points, newUserId]
-  );
-  if (ledger.rowCount) {
-    await query(`UPDATE users SET points=points+$1,updated_at=NOW() WHERE id=$2`, [points, referrerId]);
-    return { awarded: points, referrerId };
-  }
-  return { awarded: 0, referrerId };
-}
-
 export async function register(req, res) {
   const { name, email, password } = req.body;
-  const referralCode = normalizeReferralCode(req.body?.referral_code);
+  const referralCode = String(req.body.referral_code || "").trim().toUpperCase() || null;
   const cleanName = String(name || "").trim();
   const cleanEmail = normalizeEmail(email);
 
@@ -83,10 +54,10 @@ export async function register(req, res) {
   }
 
   const passwordHash = await bcrypt.hash(password, PASSWORD_ROUNDS);
-  let referredByUserId = null;
+  let referralUserId = null;
   if (referralCode) {
-    const ref = await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`, [referralCode]);
-    if (ref.rowCount) referredByUserId = ref.rows[0].id;
+    const ref = await query("SELECT id FROM users WHERE referral_code=$1 LIMIT 1", [referralCode]);
+    if (ref.rowCount) referralUserId = ref.rows[0].id;
   }
   let result;
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -94,19 +65,25 @@ export async function register(req, res) {
       result = await query(
         `INSERT INTO users (name, email, password_hash, provider, referral_code, referred_by_user_id)
          VALUES ($1, $2, $3, 'local', $4, $5)
-         RETURNING id, name, email, provider, email_verified, created_at, referral_code, points`,
-        [cleanName, cleanEmail, passwordHash, makeReferralCode(), referredByUserId]
+         RETURNING id, name, email, provider, email_verified, created_at, referral_code, points, referred_by_user_id`,
+        [cleanName, cleanEmail, passwordHash, makeReferralCode(), referralUserId]
       );
       break;
     } catch (e) {
       if (e.code !== '23505' || !String(e.detail || e.message).includes('referral')) throw e;
     }
   }
-  const newUser = result.rows[0];
-  if (referredByUserId) await awardReferralSignup(referralCode, newUser.id);
+
+  if (referralUserId && REFERRAL_SIGNUP_POINTS > 0) {
+    const ledger = await query(
+      `INSERT INTO points_ledger(user_id,points,reason,referral_user_id) VALUES($1,$2,'referral_signup',$3) RETURNING id`,
+      [referralUserId, REFERRAL_SIGNUP_POINTS, result.rows[0].id]
+    );
+    if (ledger.rowCount) await query(`UPDATE users SET points=points+$1,updated_at=NOW() WHERE id=$2`, [REFERRAL_SIGNUP_POINTS, referralUserId]);
+  }
 
   return res.status(201).json({
-    message: "تم إنشاء الحساب بنجاح.",
+    message: referralUserId && REFERRAL_SIGNUP_POINTS > 0 ? `تم إنشاء الحساب بنجاح، وحصل صاحب رابط الإحالة على ${REFERRAL_SIGNUP_POINTS} نقاط.` : "تم إنشاء الحساب بنجاح.",
     user: publicUser(result.rows[0])
   });
 }
@@ -149,12 +126,14 @@ export async function login(req, res) {
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
     maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
-    path: "/"
+    path: "/",
+    partitioned: true
   });
 
   return res.json({
     message: "تم تسجيل الدخول بنجاح.",
     user: publicUser(user),
+    token,
     redirect: isAdminUser(user) ? "/admin.html" : "/account.html"
   });
 }
@@ -164,7 +143,8 @@ export async function logout(req, res) {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
-    path: "/"
+    path: "/",
+    partitioned: true
   });
   return res.json({ message: "تم تسجيل الخروج." });
 }
@@ -279,7 +259,9 @@ export async function resetPassword(req, res) {
 
 export function authenticate(req, res, next) {
   try {
-    const token = req.cookies.auth_token;
+    const authHeader = String(req.headers.authorization || "");
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    const token = bearer || req.cookies.auth_token;
     if (!token) return res.status(401).json({ message: "غير مسجل الدخول." });
 
     const payload = jwt.verify(token, process.env.JWT_SECRET);
@@ -305,24 +287,22 @@ function googleClient() {
   return new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL);
 }
 
-function sessionCookie(res, user, remember = true) {
+function makeSessionToken(user, remember = true) {
   const expiresIn = remember ? "30d" : (process.env.JWT_EXPIRES_IN || "7d");
-  const token = jwt.sign(
-    { sub: user.id, type: "session" },
-    process.env.JWT_SECRET,
-    { expiresIn }
-  );
+  return jwt.sign({ sub: user.id, type: "session" }, process.env.JWT_SECRET, { expiresIn });
+}
+
+function sessionCookie(res, user, remember = true) {
+  const token = makeSessionToken(user, remember);
   res.cookie("auth_token", token, {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
     maxAge: remember ? 30 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
-    path: "/"
+    path: "/",
+    partitioned: true
   });
-}
-
-function makeOAuthBridgeToken(user) {
-  return jwt.sign({ sub: user.id, type: "oauth_bridge" }, process.env.JWT_SECRET, { expiresIn: "2m" });
+  return token;
 }
 
 function frontendUrl(req) {
@@ -356,21 +336,23 @@ export function googleStart(req, res) {
   }
 
   const state = randomBytes(32).toString("hex");
-  const referralCode = normalizeReferralCode(req.query?.ref);
+  const referralCode = String(req.query.ref || "").trim().toUpperCase();
   res.cookie("google_oauth_state", state, {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
     maxAge: 10 * 60 * 1000,
-    path: "/"
+    path: "/",
+    partitioned: true
   });
-  if (referralCode) {
+  if (referralCode && /^NESMA-[A-Z0-9]+$/.test(referralCode)) {
     res.cookie("google_referral_code", referralCode, {
       httpOnly: true,
       secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
       sameSite: process.env.COOKIE_SAMESITE || "none",
       maxAge: 10 * 60 * 1000,
-      path: "/"
+      path: "/",
+      partitioned: true
     });
   }
 
@@ -383,24 +365,38 @@ export function googleStart(req, res) {
   res.redirect(url);
 }
 
+export async function googleExchange(req, res) {
+  try {
+    const token = String(req.body?.token || "").trim();
+    if (!token) return res.status(400).json({ message: "رمز جلسة Google مفقود." });
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type !== "oauth_handoff") return res.status(401).json({ message: "رمز Google غير صالح." });
+    const result = await query(`SELECT id,name,email,provider,email_verified,created_at,referral_code,points FROM users WHERE id=$1 LIMIT 1`, [payload.sub]);
+    if (!result.rowCount) return res.status(401).json({ message: "الحساب غير موجود." });
+    const user = result.rows[0];
+    const session = makeSessionToken(user, true);
+    sessionCookie(res, user, true);
+    return res.json({ user: publicUser(user), token: session, redirect: isAdminUser(user) ? "/admin.html" : "/account.html" });
+  } catch {
+    return res.status(401).json({ message: "انتهت جلسة Google، حاول مرة أخرى." });
+  }
+}
+
 export async function googleCallback(req, res) {
   const client = googleClient();
   const stateCookie = req.cookies.google_oauth_state;
-  const referralCode = normalizeReferralCode(req.cookies.google_referral_code);
+  const referralCode = String(req.cookies.google_referral_code || "").trim().toUpperCase() || null;
   const { code, state, error } = req.query;
 
   res.clearCookie("google_oauth_state", {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
     sameSite: process.env.COOKIE_SAMESITE || "none",
-    path: "/"
+    path: "/",
+    partitioned: true
   });
-  res.clearCookie("google_referral_code", {
-    httpOnly: true,
-    secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
-    sameSite: process.env.COOKIE_SAMESITE || "none",
-    path: "/"
-  });
+
+  res.clearCookie("google_referral_code", { httpOnly:true, secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production", sameSite: process.env.COOKIE_SAMESITE || "none", path: "/", partitioned: true });
 
   if (!client) return res.redirect(loginRedirectUrl(req, "google_not_configured"));
   if (error) return res.redirect(loginRedirectUrl(req, "google_cancelled"));
@@ -434,6 +430,9 @@ export async function googleCallback(req, res) {
     );
 
     let user;
+    let isNewGoogleUser = false;
+    let referralUserId = null;
+    if (referralCode) { const rr = await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`, [referralCode]); if (rr.rowCount) referralUserId = rr.rows[0].id; }
     if (result.rowCount) {
       user = result.rows[0];
       await query(
@@ -449,20 +448,23 @@ export async function googleCallback(req, res) {
       const created = await query(
         `INSERT INTO users (name,email,password_hash,provider,provider_id,email_verified,referral_code,referred_by_user_id)
          VALUES ($1,$2,NULL,'google',$3,$4,$5,$6)
-         RETURNING id,name,email,password_hash,provider,provider_id,email_verified,created_at,referral_code,points`,
-        [name, email, googleId, emailVerified, makeReferralCode(), referralCode ? (await query(`SELECT id FROM users WHERE referral_code=$1 LIMIT 1`, [referralCode])).rows[0]?.id || null : null]
+         RETURNING id,name,email,password_hash,provider,provider_id,email_verified,created_at,referral_code,points,referred_by_user_id`,
+        [name, email, googleId, emailVerified, makeReferralCode(), referralUserId]
       );
+      isNewGoogleUser = true;
       user = created.rows[0];
-      if (referralCode) await awardReferralSignup(referralCode, user.id);
     }
 
-    // The frontend is hosted on Cloudflare Pages while the API is on Render.
-    // A direct Render cookie is cross-site from pages.dev, so bridge the OAuth
-    // session through the same-origin /api proxy before opening account.html.
-    sessionCookie(res, user, true);
-    const bridgeToken = makeOAuthBridgeToken(user);
-    const target = isAdminUser(user) ? "admin.html" : "account.html";
-    return res.redirect(`${frontendUrl(req)}/api/auth/bridge?token=${encodeURIComponent(bridgeToken)}&target=${target}`);
+    if (isNewGoogleUser && referralUserId && REFERRAL_SIGNUP_POINTS > 0) {
+      const ledger = await query(`INSERT INTO points_ledger(user_id,points,reason,referral_user_id) VALUES($1,$2,'referral_signup',$3) RETURNING id`, [referralUserId, REFERRAL_SIGNUP_POINTS, user.id]);
+      if (ledger.rowCount) await query(`UPDATE users SET points=points+$1,updated_at=NOW() WHERE id=$2`, [REFERRAL_SIGNUP_POINTS, referralUserId]);
+    }
+
+    // Create the session before redirecting so /account.html can immediately
+    // verify the authenticated user.
+    const handoff = jwt.sign({ sub: user.id, type: "oauth_handoff" }, process.env.JWT_SECRET, { expiresIn: "2m" });
+    const target = `${frontendUrl(req)}/login.html#oauth_token=${encodeURIComponent(handoff)}`;
+    return res.redirect(target);
   } catch (error) {
     console.error("Google OAuth error:", error);
     return res.redirect(loginRedirectUrl(req, "google_failed"));

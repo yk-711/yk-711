@@ -1,4 +1,4 @@
-# متجر نسمة — النسخة المصححة
+# متجر أثير — النسخة المصححة
 
 تم إصلاح وتجهيز النسخة وفق المطلوب:
 - حذف الشريط العلوي الذي يحتوي رقم الهاتف والبريد وروابط التواصل.
@@ -21,7 +21,6 @@
 
 ملاحظة: روابط صور العبايات الخارجية تعتمد على اتصال الإنترنت أثناء تحميل الصور.
 
-\n## Google OAuth\n
-في Render أضف المتغيرات `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` و`GOOGLE_CALLBACK_URL`.
-يجب أن يكون عنوان Callback في Google Cloud مطابقاً تماماً:
-`https://nesma-store.onrender.com/api/auth/google/callback`
+## Google OAuth
+
+في Render اضبط المتغيرات `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET` و`GOOGLE_CALLBACK_URL` و`FRONTEND_URL`. تفاصيل تغيير عنوان الواجهة إلى أثير موجودة في `DEPLOY-ATHEER.md`.

@@ -25,7 +25,7 @@ function publicUser(user) {
 }
 
 function makeReferralCode() {
-  return `NESMA-${randomBytes(3).toString("hex").toUpperCase()}`;
+  return `ATHEER-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
 export async function register(req, res) {
@@ -308,7 +308,7 @@ function sessionCookie(res, user, remember = true) {
 function frontendUrl(req) {
   const configured = String(process.env.FRONTEND_URL || "").trim().replace(/\/$/, "");
   if (configured) return configured;
-  if (process.env.NODE_ENV === "production") return "https://nesma-store.pages.dev";
+  if (process.env.NODE_ENV === "production") return "https://atheer-store.pages.dev";
   return `${req.protocol}://${req.get("host")}`;
 }
 
@@ -345,7 +345,7 @@ export function googleStart(req, res) {
     path: "/",
     partitioned: true
   });
-  if (referralCode && /^NESMA-[A-Z0-9]+$/.test(referralCode)) {
+  if (referralCode && /^(?:ATHEER|NESMA)-[A-Z0-9]+$/.test(referralCode)) {
     res.cookie("google_referral_code", referralCode, {
       httpOnly: true,
       secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",

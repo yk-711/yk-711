@@ -25,7 +25,7 @@ async function consumeGoogleToken(){
 consumeGoogleToken();
 
 const referralFromUrl = new URLSearchParams(window.location.search).get("ref");
-if (referralFromUrl && /^NESMA-[A-Z0-9]+$/i.test(referralFromUrl)) localStorage.setItem("nesma-referral-code", referralFromUrl.toUpperCase());
+if (referralFromUrl && /^(?:ATHEER|NESMA)-[A-Z0-9]+$/i.test(referralFromUrl)) localStorage.setItem("nesma-referral-code", referralFromUrl.toUpperCase());
 
 function showRegister() {
   clearMessages();

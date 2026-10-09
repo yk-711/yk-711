@@ -1,4 +1,4 @@
-/* NESMA IMAGE SLIDER ADDON - مستقل عن بقية المتجر */
+/* ATHEER IMAGE SLIDER ADDON - مستقل عن بقية المتجر */
 .nesma-slider-addon{width:100%;max-width:1400px;margin:30px auto;position:relative;overflow:hidden;border-radius:40px;box-shadow:0 8px 25px rgba(0,0,0,.15);background:#ddd;direction:ltr}
 .nesma-slider-addon *{box-sizing:border-box}
 .nesma-slider-addon__track{display:flex;direction:ltr;transition:transform .7s ease-in-out}

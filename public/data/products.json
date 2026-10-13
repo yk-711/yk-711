@@ -1,14 +1,38 @@
 {
   "version": 1,
-  "generated_at": "2026-10-05T08:28:11.129Z",
+  "generated_at": "2026-10-13T02:22:23.619Z",
   "categories": [
     {
-      "id": "1eefada9-c7d2-4808-b58f-fd57a28fe0de",
-      "name": "عبايات",
-      "slug": "عبايات",
-      "image_url": "",
+      "id": "07eac551-a2ea-4440-a2b0-e65b06c2afba",
+      "name": "بناتي",
+      "slug": "بناتي",
+      "image_url": "https://atheer-store.pages.dev/images/products/nesma-trend-3-1791856211129.webp",
       "active": true,
       "sort_order": 0
+    },
+    {
+      "id": "dfeff87f-4af7-42fc-b0cf-10345bb0a9cb",
+      "name": "إكسسوارات",
+      "slug": "إكسسوارات",
+      "image_url": "https://atheer-store.pages.dev/images/products/nesma-trend-1-1791856241277.webp",
+      "active": true,
+      "sort_order": 1
+    },
+    {
+      "id": "18a20d7b-df5c-408b-9aee-e6c05b309f21",
+      "name": "عبايات",
+      "slug": "عبايات",
+      "image_url": "https://cdn.salla.sa/mQwyRy/2JxXyIwoUPmBF1GY3WUPkq0wFUld5yxUQB5T0I61.jpg",
+      "active": true,
+      "sort_order": 1
+    },
+    {
+      "id": "85e33436-073a-4382-8e9e-5347c8773169",
+      "name": "فساتين",
+      "slug": "فساتين",
+      "image_url": "https://atheer-store.pages.dev/images/products/nesma-trend-2-1791856783001.webp",
+      "active": true,
+      "sort_order": 1
     },
     {
       "id": "a7a41b9e-b76b-46af-9673-1050f64bbb5a",
@@ -25,33 +49,54 @@
       "image_url": "",
       "active": true,
       "sort_order": 2
-    },
-    {
-      "id": "1a267b46-42b9-48fe-a8f6-a4722a8f8f30",
-      "name": "العروض",
-      "slug": "العروض",
-      "image_url": "",
-      "active": true,
-      "sort_order": 3
-    },
-    {
-      "id": "c4b26d58-78d9-4dbd-a714-119f1c2ceeb3",
-      "name": "نصف القمر",
-      "slug": "إكسسوارات",
-      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ8OtLQBZGMfcpipoYkivjE4sgl8v6cC6cJKRHFswXLYw&s",
-      "active": true,
-      "sort_order": 4
-    },
-    {
-      "id": "12caafe7-e704-4f23-aa54-bc7e5fbf50ed",
-      "name": "أطقم",
-      "slug": "أطقم",
-      "image_url": "",
-      "active": true,
-      "sort_order": 5
     }
   ],
   "products": [
+    {
+      "id": "513d4401-7708-4ba8-89e1-d9e373dd89c6",
+      "title": "👑 موديل «ليمار»",
+      "description": "👑 موديل «ليمار» | أناقة تبدأ الترند\nالترند ما نلحقه… نحن نبدأه. 👑🔥\n| \n✨ موديل ليمار بتصميم أنيق يجمع بين الفخامة والنعومة، بتفاصيل زلكونات راقية ولمسات أنثوية تمنح الإطلالة حضورًا مميزًا في كل مناسبة.\n💎 التفاصيل:\nالقماش: تفتة تركي فاخر\nمزين بـ زلكونات ولمسات فاخرة\nتصميم واسع وأنيق يمنح الفستان انسيابية جميلة\nمناسب للحفلات والمناسبات والإطلالات المميزة\n\n🔥 ألوان متعددة… وأناقة واحدة:\nاختاري اللون الذي يليق بأميرة إطلالتك.\nليمار… لأن التفاصيل الصغيرة هي التي تصنع الإطلالة الكبيرة. 👑✨",
+      "category": "بناتي",
+      "category_slugs": [
+        "بناتي"
+      ],
+      "audience": "women",
+      "image_url": "/images/products/موديل-ليمار-1791858133680.webp",
+      "images": [
+        "/images/products/موديل-ليمار-1791858135289.webp",
+        "/images/products/موديل-ليمار-1791858136754.webp",
+        "/images/products/موديل-ليمار-1791858138547.webp",
+        "/images/products/موديل-ليمار-1791858140191.webp",
+        "/images/products/موديل-ليمار-1791858141863.webp"
+      ],
+      "sizes": [
+        "متوفر من ٣ سنوات إلى ١٢ سنة"
+      ],
+      "colors": [
+        "احمر",
+        "لحمي",
+        "بيج",
+        "ازرق",
+        "اسود"
+      ],
+      "fabrics": [
+        "تفتة تركي فاخر"
+      ],
+      "old_price": "7000.00",
+      "price": "6000.00",
+      "rating": "5.00",
+      "reviews": 0,
+      "tags": "جديد✨️",
+      "prep_time": 10,
+      "badges": [
+        "راقي وحصري"
+      ],
+      "active": true,
+      "selected": true,
+      "sort_order": 0,
+      "created_at": "2026-10-13T02:22:23.569Z",
+      "updated_at": "2026-10-13T02:22:23.569Z"
+    },
     {
       "id": "6bcd64b8-e3fc-4623-bf9c-94fa5fce1dc7",
       "title": "عباية بتطريز يدوي 😉👌 — نسخة",
